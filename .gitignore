@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+*.js.map
+*.d.ts.map
+.env
+*.log
+.env.local
+
+.cache/
+data/
+traces/
+*.tsbuildinfo
+*.db
+*.db-shm
+*.db-wal
