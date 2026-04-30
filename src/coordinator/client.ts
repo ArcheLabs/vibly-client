@@ -613,6 +613,20 @@ export class CoordinatorClient {
     return this.list<unknown>(ROUTES.phaseFRuns, query);
   }
 
+  // ── Phase H ──────────────────────────────────────────────────────────────────
+
+  async runPhaseHSmoke(): Promise<unknown> {
+    return this.request(ROUTES.phaseHSmoke, { method: "POST", body: {} });
+  }
+
+  async listPhaseHRuns(query?: { projectId?: string; limit?: number; cursor?: string }): Promise<{ items: unknown[]; meta?: PageMeta }> {
+    return this.list<unknown>(ROUTES.phaseHRuns, query);
+  }
+
+  async getPhaseHOverview(projectId: string): Promise<unknown> {
+    return this.request(ROUTES.phaseHOverview(projectId));
+  }
+
   async listGuardianRequests(query?: { projectId?: string; actionId?: string; status?: string; limit?: number; cursor?: string }): Promise<{ items: unknown[]; meta?: PageMeta }> {
     return this.list<unknown>(ROUTES.guardianRequests, query);
   }

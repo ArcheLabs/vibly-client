@@ -83,6 +83,7 @@ vibly daemon start
 | `vibly events list/stream` | 查看和流式订阅事件 |
 | `vibly trace list/show/verify/replay` | 追踪管理 |
 | `vibly phase-f smoke/runs` | 运行或查看 Phase F 测试 Agent 协作 smoke |
+| `vibly phase-h smoke/runs/status` | 运行或查看 Phase H 激励/风险 smoke |
 
 ### 同步 & Daemon
 
@@ -135,6 +136,18 @@ vibly trace replay trace_phase_f_smoke
 ```
 
 `phase-f smoke` 会触发 coordinator 的 dev-only scripted loop：Observer 观察并提出 high-risk action，Delegate/Guardian 协商，Worker 执行，Reviewer 评审，随后生成可验证和重放的 trace。
+
+### Phase H 最小激励/风险闭环
+
+Coordinator 需启用 `ENABLE_DEV_ROUTES=true`。Client 验证：
+
+```bash
+vibly phase-h smoke
+vibly phase-h runs
+vibly phase-h status --project-id project_phase-f-collaboration
+```
+
+`phase-h smoke` 会在 Phase F accepted work 基础上生成 reward intent、mock ledger funding receipt、claimable reward、reputation evidence、slash request 与 Guardian-visible risk 记录。Phase H 默认使用 mock ledger；真实 Vibly chain settlement 留给后续阶段。
 
 Substrate OpenGov 直链/直 indexer 路径：
 

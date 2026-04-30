@@ -84,5 +84,8 @@ export const ROUTES = {
 
   phaseFSmoke: "/phase-f/smoke",
   phaseFRuns: "/phase-f/runs",
+  phaseHSmoke: "/phase-h/smoke",
+  phaseHRuns: "/phase-h/runs",
+  phaseHOverview: (projectId: string) => `/projects/${projectId}/phase-h/overview`,
   guardianRequests: "/guardian-requests",
 } as const;
