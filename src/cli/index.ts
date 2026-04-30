@@ -18,6 +18,7 @@ import { registerEventCommands } from "./commands/events.js";
 import { registerTraceCommands } from "./commands/trace.js";
 import { registerDaemonCommands } from "./commands/daemon.js";
 import { registerGovernanceCommands } from "./commands/governance.js";
+import { registerPhaseFCommands } from "./commands/phase-f.js";
 
 export function buildCli(): Command {
   const program = new Command();
@@ -58,6 +59,7 @@ export function buildCli(): Command {
   registerTraceCommands(program);
   registerDaemonCommands(program);
   registerGovernanceCommands(program);
+  registerPhaseFCommands(program);
 
   return program;
 }

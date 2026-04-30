@@ -81,4 +81,8 @@ export const ROUTES = {
   traceVerify: (id: string) => `/traces/${id}/verify`,
   traceReplay: (id: string) => `/traces/${id}/replay`,
   projectTraces: (id: string) => `/projects/${id}/traces`,
+
+  phaseFSmoke: "/phase-f/smoke",
+  phaseFRuns: "/phase-f/runs",
+  guardianRequests: "/guardian-requests",
 } as const;

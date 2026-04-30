@@ -342,6 +342,10 @@ export class CoordinatorClient {
     return this.list<WorkOrder>(ROUTES.workOrdersOpen, query);
   }
 
+  async listWorkOrders(query?: { projectId?: string; status?: string; limit?: number; cursor?: string }): Promise<{ items: WorkOrder[]; meta?: PageMeta }> {
+    return this.list<WorkOrder>(ROUTES.workOrders, query);
+  }
+
   async getWorkOrder(id: string): Promise<WorkOrder> {
     const data = await this.request<{ workOrder: WorkOrder }>(ROUTES.workOrder(id));
     return (data as { workOrder: WorkOrder }).workOrder;
@@ -597,6 +601,20 @@ export class CoordinatorClient {
 
   async replayTrace(id: string): Promise<unknown> {
     return this.request(ROUTES.traceReplay(id), { method: "POST", body: {} });
+  }
+
+  // ── Phase F ──────────────────────────────────────────────────────────────────
+
+  async runPhaseFSmoke(): Promise<unknown> {
+    return this.request(ROUTES.phaseFSmoke, { method: "POST", body: {} });
+  }
+
+  async listPhaseFRuns(query?: { limit?: number; cursor?: string }): Promise<{ items: unknown[]; meta?: PageMeta }> {
+    return this.list<unknown>(ROUTES.phaseFRuns, query);
+  }
+
+  async listGuardianRequests(query?: { projectId?: string; actionId?: string; status?: string; limit?: number; cursor?: string }): Promise<{ items: unknown[]; meta?: PageMeta }> {
+    return this.list<unknown>(ROUTES.guardianRequests, query);
   }
 
   /** Base URL for SSE stream */

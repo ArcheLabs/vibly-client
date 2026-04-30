@@ -82,6 +82,7 @@ vibly daemon start
 | `vibly knowledge show/list` | 查看知识版本 |
 | `vibly events list/stream` | 查看和流式订阅事件 |
 | `vibly trace list/show/verify/replay` | 追踪管理 |
+| `vibly phase-f smoke/runs` | 运行或查看 Phase F 测试 Agent 协作 smoke |
 
 ### 同步 & Daemon
 
@@ -121,6 +122,19 @@ vibly governance reconcile <intentId> --external-id <referendumIndex>
 vibly governance vote-opengov <subjectId> --voter <account> --stance aye --weight 2000000000
 vibly governance merged --backend substrate-opengov
 ```
+
+### Phase F 测试 Agent 协作闭环
+
+Coordinator 需启用 `ENABLE_DEV_ROUTES=true`。Client 验证：
+
+```bash
+vibly phase-f smoke
+vibly phase-f runs
+vibly trace verify trace_phase_f_smoke
+vibly trace replay trace_phase_f_smoke
+```
+
+`phase-f smoke` 会触发 coordinator 的 dev-only scripted loop：Observer 观察并提出 high-risk action，Delegate/Guardian 协商，Worker 执行，Reviewer 评审，随后生成可验证和重放的 trace。
 
 Substrate OpenGov 直链/直 indexer 路径：
 
