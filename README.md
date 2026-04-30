@@ -99,7 +99,16 @@ Coordinator 读路径：
 | `vibly governance merged [--backend evm-governor]` | 从 coordinator 读取统一 merged governance view |
 | `vibly governance subjects [--backend evm-governor]` | 从 coordinator 读取 typed governance subjects |
 | `vibly governance checkpoint [--backend evm-governor]` | 查看 coordinator 的 governance index checkpoint |
-| `vibly governance backends` | 查看已注册 governance backend descriptors 与 capabilities |
+| `vibly governance backends` | 查看已注册 governance backend descriptors、capabilities 与 health/freshness |
+
+Phase D.5 demo 验证建议：
+
+```bash
+vibly governance backends
+vibly governance merged --backend evm-governor
+vibly governance subjects --backend substrate-opengov
+vibly governance checkpoint --backend evm-governor
+```
 
 Substrate OpenGov 直链/直 indexer 路径：
 

@@ -417,10 +417,14 @@ function printMergedItems(items: unknown[]): void {
     const status = asRecord(record["status"]);
     const freshness = asRecord(record["freshness"]);
     const title = String(asRecord(record["intent"])["title"] ?? subject["title"] ?? "(untitled)");
+    const checkpoint = asRecord(freshness["checkpoint"]);
     process.stdout.write(
       `${String(record["id"] ?? "unknown")}  [${String(status["merged"] ?? "unknown")}]  ${String(subject["backend"] ?? "-")}  ${title}`,
     );
-    if (freshness["stale"]) process.stdout.write("  stale");
+    if (freshness["stale"]) {
+      process.stdout.write(`  stale${freshness["reason"] ? `:${String(freshness["reason"])}` : ""}`);
+    }
+    if (checkpoint["observedAt"]) process.stdout.write(`  observed=${String(checkpoint["observedAt"])}`);
     process.stdout.write("\n");
   }
 }
@@ -461,6 +465,8 @@ function printBackendItems(items: unknown[]): void {
   for (const item of items) {
     const record = asRecord(item);
     const capabilities = asRecord(record["capabilities"]);
+    const health = asRecord(record["health"]);
+    const chain = asRecord(record["chain"]);
     const write = Boolean(
       capabilities["castVote"] ||
         capabilities["delegate"] ||
@@ -468,8 +474,11 @@ function printBackendItems(items: unknown[]): void {
         capabilities["executeProposal"],
     );
     process.stdout.write(
-      `${String(record["id"] ?? "unknown")}  ${String(record["backend"] ?? "-")}  ${write ? "actions" : "read-only"}\n`,
+      `${String(record["id"] ?? "unknown")}  ${String(record["backend"] ?? "-")}  ${String(chain["namespace"] ?? "-")}:${String(chain["chainId"] ?? "-")}  ${write ? "actions" : "read-only"}  ${String(health["status"] ?? "unknown")}`,
     );
+    if (health["reason"]) process.stdout.write(`:${String(health["reason"])}`);
+    if (health["lastObservedAt"]) process.stdout.write(`  observed=${String(health["lastObservedAt"])}`);
+    process.stdout.write("\n");
   }
 }
 

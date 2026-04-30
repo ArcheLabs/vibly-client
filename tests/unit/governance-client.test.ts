@@ -78,4 +78,38 @@ describe("CoordinatorClient governance reads", () => {
       expect.objectContaining({ method: "GET" }),
     );
   });
+
+  it("lists governance backends with health state", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          ok: true,
+          data: {
+            backends: [
+              {
+                id: "evm-fixture",
+                backend: "evm-governor",
+                health: { status: "stale", stale: true, reason: "checkpoint_age_exceeds_threshold" },
+              },
+            ],
+          },
+        }),
+      ),
+    );
+
+    const result = await client().listGovernanceBackends();
+
+    expect(result.items).toEqual([
+      {
+        id: "evm-fixture",
+        backend: "evm-governor",
+        health: { status: "stale", stale: true, reason: "checkpoint_age_exceeds_threshold" },
+      },
+    ]);
+    expect(fetch).toHaveBeenCalledWith(
+      "http://coordinator.test/governance/backends",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
 });
