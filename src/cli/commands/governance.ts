@@ -5,6 +5,9 @@
  * They are intentionally separate from `vibly vote` (negotiation vote).
  *
  * Commands:
+ *   vibly governance merged                        – read merged governance view via coordinator
+ *   vibly governance subjects                      – read typed subjects via coordinator
+ *   vibly governance checkpoint                    – read index checkpoint via coordinator
  *   vibly governance list                          – list open referenda via SubQuery
  *   vibly governance show <referendumIndex>        – show a single referendum
  *   vibly governance vote <referendumIndex>        – cast an on-chain vote
@@ -14,6 +17,8 @@
  */
 
 import { Command } from "commander";
+import { CoordinatorClient } from "../../coordinator/client.js";
+import { loadActiveProfile, requireApiToken } from "../../config/profiles.js";
 import { resolveChainSignerOptions } from "../../chain/signer.js";
 import { getEnv } from "../../config/env.js";
 
@@ -51,7 +56,103 @@ async function getIndexerQuery(opts: { indexerUrl?: string; chainId?: string }) 
 export function registerGovernanceCommands(program: Command): void {
   const gov = program
     .command("governance")
-    .description("On-chain OpenGov commands (direct chain, not coordinator)");
+    .description("Governance read commands and direct on-chain OpenGov actions");
+
+  // ── coordinator read: merged ───────────────────────────────────────────────
+  gov
+    .command("merged")
+    .description("List merged governance views from the coordinator")
+    .option("--project-id <id>", "Project id (defaults to active profile project)")
+    .option("--backend <kind>", "Filter by governance backend, e.g. evm-governor")
+    .option("--limit <n>", "Max results", "20")
+    .action(async (opts) => {
+      try {
+        const { client, profile } = getCoordinatorClient();
+        const result = await client.listGovernanceMerged({
+          projectId: opts.projectId ?? profile.projectId,
+          backend: opts.backend,
+          limit: Number(opts.limit),
+        });
+        if (program.opts().json) {
+          process.stdout.write(JSON.stringify(result, jsonReplacer, 2) + "\n");
+        } else {
+          printMergedItems(result.items);
+        }
+      } catch (err) {
+        process.stderr.write(`Error: ${String(err)}\n`);
+        process.exit(1);
+      }
+    });
+
+  // ── coordinator read: subjects ─────────────────────────────────────────────
+  gov
+    .command("subjects")
+    .description("List governance subjects from the coordinator")
+    .option("--backend <kind>", "Filter by governance backend, e.g. evm-governor")
+    .option("--chain-id <id>", "Filter by chain id")
+    .option("--status <status>", "Filter by governance status")
+    .option("--limit <n>", "Max results", "20")
+    .action(async (opts) => {
+      try {
+        const { client } = getCoordinatorClient();
+        const result = await client.listGovernanceSubjects({
+          backend: opts.backend,
+          chainId: opts.chainId,
+          status: opts.status,
+          limit: Number(opts.limit),
+        });
+        if (program.opts().json) {
+          process.stdout.write(JSON.stringify(result, jsonReplacer, 2) + "\n");
+        } else {
+          printSubjectItems(result.items);
+        }
+      } catch (err) {
+        process.stderr.write(`Error: ${String(err)}\n`);
+        process.exit(1);
+      }
+    });
+
+  // ── coordinator read: checkpoint ───────────────────────────────────────────
+  gov
+    .command("checkpoint")
+    .description("Show governance index checkpoint from the coordinator")
+    .option("--backend <kind>", "Filter by governance backend, e.g. evm-governor")
+    .option("--chain-id <id>", "Filter by chain id")
+    .action(async (opts) => {
+      try {
+        const { client } = getCoordinatorClient();
+        const result = await client.getGovernanceCheckpoint({
+          backend: opts.backend,
+          chainId: opts.chainId,
+        });
+        if (program.opts().json) {
+          process.stdout.write(JSON.stringify(result, jsonReplacer, 2) + "\n");
+        } else {
+          printCheckpoint(result.checkpoint);
+        }
+      } catch (err) {
+        process.stderr.write(`Error: ${String(err)}\n`);
+        process.exit(1);
+      }
+    });
+
+  gov
+    .command("backends")
+    .description("List governance backend descriptors from the coordinator")
+    .action(async () => {
+      try {
+        const { client } = getCoordinatorClient();
+        const result = await client.listGovernanceBackends();
+        if (program.opts().json) {
+          process.stdout.write(JSON.stringify(result, jsonReplacer, 2) + "\n");
+        } else {
+          printBackendItems(result.items);
+        }
+      } catch (err) {
+        process.stderr.write(`Error: ${String(err)}\n`);
+        process.exit(1);
+      }
+    });
 
   // ── list ──────────────────────────────────────────────────────────────────
   gov
@@ -294,4 +395,84 @@ export function registerGovernanceCommands(program: Command): void {
 function jsonReplacer(_key: string, value: unknown): unknown {
   if (typeof value === "bigint") return value.toString();
   return value;
+}
+
+function getCoordinatorClient() {
+  const { profile } = loadActiveProfile();
+  const token = requireApiToken(profile);
+  return {
+    client: new CoordinatorClient({ baseUrl: profile.coordinatorUrl, token }),
+    profile,
+  };
+}
+
+function printMergedItems(items: unknown[]): void {
+  if (items.length === 0) {
+    process.stdout.write("No merged governance views found.\n");
+    return;
+  }
+  for (const item of items) {
+    const record = asRecord(item);
+    const subject = asRecord(record["subject"]);
+    const status = asRecord(record["status"]);
+    const freshness = asRecord(record["freshness"]);
+    const title = String(asRecord(record["intent"])["title"] ?? subject["title"] ?? "(untitled)");
+    process.stdout.write(
+      `${String(record["id"] ?? "unknown")}  [${String(status["merged"] ?? "unknown")}]  ${String(subject["backend"] ?? "-")}  ${title}`,
+    );
+    if (freshness["stale"]) process.stdout.write("  stale");
+    process.stdout.write("\n");
+  }
+}
+
+function printSubjectItems(items: unknown[]): void {
+  if (items.length === 0) {
+    process.stdout.write("No governance subjects found.\n");
+    return;
+  }
+  for (const item of items) {
+    const record = asRecord(item);
+    process.stdout.write(
+      `${String(record["id"] ?? record["externalId"] ?? "unknown")}  [${String(record["status"] ?? "unknown")}]  ${String(record["backend"] ?? "-")}  ${String(record["title"] ?? "(untitled)")}\n`,
+    );
+  }
+}
+
+function printCheckpoint(checkpoint: unknown): void {
+  if (!checkpoint) {
+    process.stdout.write("No governance checkpoint found.\n");
+    return;
+  }
+  const record = asRecord(checkpoint);
+  const chain = asRecord(record["chain"]);
+  const cursor = asRecord(record["cursor"]);
+  process.stdout.write(`Checkpoint ${String(record["id"] ?? "-")}\n`);
+  process.stdout.write(`  Chain      : ${String(chain["namespace"] ?? "-")}:${String(chain["chainId"] ?? "-")}\n`);
+  process.stdout.write(`  Block      : ${String(cursor["blockNumber"] ?? "-")}\n`);
+  process.stdout.write(`  Finalized  : ${String(record["finalized"] ?? false)}\n`);
+  process.stdout.write(`  Observed at: ${String(record["observedAt"] ?? "-")}\n`);
+}
+
+function printBackendItems(items: unknown[]): void {
+  if (items.length === 0) {
+    process.stdout.write("No governance backends registered.\n");
+    return;
+  }
+  for (const item of items) {
+    const record = asRecord(item);
+    const capabilities = asRecord(record["capabilities"]);
+    const write = Boolean(
+      capabilities["castVote"] ||
+        capabilities["delegate"] ||
+        capabilities["queueExecution"] ||
+        capabilities["executeProposal"],
+    );
+    process.stdout.write(
+      `${String(record["id"] ?? "unknown")}  ${String(record["backend"] ?? "-")}  ${write ? "actions" : "read-only"}\n`,
+    );
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }

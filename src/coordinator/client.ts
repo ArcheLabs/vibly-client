@@ -481,6 +481,42 @@ export class CoordinatorClient {
     });
   }
 
+  // ── Governance ─────────────────────────────────────────────────────────────
+
+  async listGovernanceMerged(query?: {
+    projectId?: string;
+    backend?: string;
+    limit?: number;
+    cursor?: string;
+  }): Promise<{ items: unknown[]; meta?: PageMeta }> {
+    return this.list<unknown>(ROUTES.governanceMerged, query);
+  }
+
+  async listGovernanceSubjects(query?: {
+    backend?: string;
+    chainId?: string;
+    status?: string;
+    limit?: number;
+    cursor?: string;
+  }): Promise<{ items: unknown[]; meta?: PageMeta }> {
+    return this.list<unknown>(ROUTES.governanceSubjects, query);
+  }
+
+  async getGovernanceCheckpoint(query?: {
+    backend?: string;
+    chainId?: string;
+  }): Promise<{ checkpoint: unknown | null; items?: unknown[] }> {
+    const qs = query ? buildQueryString(query) : "";
+    return this.request<{ checkpoint: unknown | null; items?: unknown[] }>(
+      `${ROUTES.governanceCheckpoint}${qs}`,
+    );
+  }
+
+  async listGovernanceBackends(): Promise<{ items: unknown[] }> {
+    const data = await this.request<{ backends?: unknown[] }>(ROUTES.governanceBackends);
+    return { items: data.backends ?? [] };
+  }
+
   // ── Events ───────────────────────────────────────────────────────────────────
 
   async listEvents(query?: {

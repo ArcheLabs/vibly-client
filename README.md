@@ -3,7 +3,7 @@
 vibly-client 是 Vibly 协调网络的 CLI 和后台 daemon。分两类命令：
 
 - **协调层命令**（大多数命令）：通过 HTTP 与 `vibly-coordinator` 交互，管理项目、工作单、协商、评审等协议流程。
-- **链上治理命令**（`vibly governance`）：直接通过 polkadot-api (PAPI) 与 vibly-chain solo-node 交互，或查询 vibly-indexer SubQuery GraphQL endpoint。
+- **治理命令**（`vibly governance`）：读路径可通过 coordinator 查询统一 merged view；Substrate OpenGov 写路径仍直接通过 polkadot-api (PAPI) 与 vibly-chain solo-node 交互，或查询 vibly-indexer SubQuery GraphQL endpoint。
 
 ## 安装
 
@@ -90,9 +90,18 @@ vibly daemon start
 | `vibly sync events/work/project/all` | 同步本地状态 |
 | `vibly daemon start/once/status` | 后台 daemon |
 
-### 链上治理（`vibly governance`）
+### 治理（`vibly governance`）
 
-直接与 vibly-chain 交互，**不经过 coordinator**：
+Coordinator 读路径：
+
+| 命令 | 说明 |
+|---|---|
+| `vibly governance merged [--backend evm-governor]` | 从 coordinator 读取统一 merged governance view |
+| `vibly governance subjects [--backend evm-governor]` | 从 coordinator 读取 typed governance subjects |
+| `vibly governance checkpoint [--backend evm-governor]` | 查看 coordinator 的 governance index checkpoint |
+| `vibly governance backends` | 查看已注册 governance backend descriptors 与 capabilities |
+
+Substrate OpenGov 直链/直 indexer 路径：
 
 | 命令 | 说明 |
 |---|---|

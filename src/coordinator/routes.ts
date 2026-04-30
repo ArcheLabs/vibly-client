@@ -63,6 +63,11 @@ export const ROUTES = {
   rewardReserve: (id: string) => `/rewards/${id}/reserve`,
   rewardClaim: (id: string) => `/rewards/${id}/claim`,
 
+  governanceMerged: "/governance/merged",
+  governanceSubjects: "/governance/subjects",
+  governanceCheckpoint: "/governance/checkpoint",
+  governanceBackends: "/governance/backends",
+
   events: "/events",
   event: (id: string) => `/events/${id}`,
   streamEvents: "/streams/events",
