@@ -1,118 +1,146 @@
 # vibly-client
 
-CLI and daemon for interacting with the Vibly coordinator network.
+vibly-client 是 Vibly 协调网络的 CLI 和后台 daemon。分两类命令：
 
-## Installation
+- **协调层命令**（大多数命令）：通过 HTTP 与 `vibly-coordinator` 交互，管理项目、工作单、协商、评审等协议流程。
+- **链上治理命令**（`vibly governance`）：直接通过 polkadot-api (PAPI) 与 vibly-chain solo-node 交互，或查询 vibly-indexer SubQuery GraphQL endpoint。
+
+## 安装
 
 ```bash
 pnpm install
 pnpm build
-# Optionally link globally
+# 可选：全局链接
 npm link
 ```
 
-## Quick Start
+## 快速开始
 
 ```bash
-# 1. Log in to a coordinator
-vibly login --coordinator https://coordinator.vibly.io --token <your-api-token>
+# 1. 连接 coordinator
+vibly login --coordinator http://localhost:8787 --token dev-token
 
-# 2. Register your principal
+# 2. 注册委托人
 vibly principal register --kind human --name "My Principal"
 
-# 3. Register an agent
+# 3. 注册 Agent
 vibly agent register --name "My Agent" --capabilities "research,analysis"
 
-# 4. Register a local runtime
+# 4. 注册本地脚本运行时
 vibly runtime register-script --name my-runtime --command "node scripts/my-agent.js"
 
-# 5. Create/select a project
+# 5. 选择项目
 vibly project use <project-id>
 
-# 6. Sync local state
+# 6. 同步本地状态
 vibly sync all
 
-# 7. Run the daemon (auto-processes work orders)
+# 7. 启动 daemon（自动处理工作单）
 vibly daemon start
 ```
 
-## CLI Commands
+## CLI 命令
 
-### Auth
-| Command | Description |
-|---------|-------------|
-| `vibly login` | Authenticate and save profile |
-| `vibly logout [profile]` | Remove a saved profile |
+### 认证 & 配置
 
-### Configuration
-| Command | Description |
-|---------|-------------|
-| `vibly config show` | Show current configuration |
-| `vibly config set-profile <name>` | Switch active profile |
-| `vibly status` | Show active profile details |
+| 命令 | 说明 |
+|---|---|
+| `vibly login` | 认证并保存 profile |
+| `vibly logout [profile]` | 删除已保存的 profile |
+| `vibly config show` | 显示当前配置 |
+| `vibly config set-profile <name>` | 切换活跃 profile |
+| `vibly status` | 显示活跃 profile 详情 |
 
-### Principal
-| Command | Description |
-|---------|-------------|
-| `vibly principal register` | Register a new principal |
-| `vibly principal show` | Show principal details |
-| `vibly principal bind-address` | Bind a blockchain address |
-| `vibly principal list` | List all principals |
+### 委托人 & Agent
 
-### Agent
-| Command | Description |
-|---------|-------------|
-| `vibly agent register` | Register a new agent |
-| `vibly agent show` | Show agent details |
-| `vibly agent availability <status>` | Change agent status |
-| `vibly agent bind-runtime` | Create a runtime binding |
+| 命令 | 说明 |
+|---|---|
+| `vibly principal register/show/list/bind-address` | 委托人管理 |
+| `vibly agent register/show/availability/bind-runtime` | Agent 管理 |
+| `vibly runtime list/register-script/show/delete` | 本地运行时管理 |
 
-### Runtime (local)
-| Command | Description |
-|---------|-------------|
-| `vibly runtime list` | List registered local runtimes |
-| `vibly runtime register-script` | Register a script as a runtime |
-| `vibly runtime show <name-or-id>` | Show runtime details |
-| `vibly runtime delete <name-or-id>` | Remove a runtime |
+### 工作流程
 
-### Work
-| Command | Description |
-|---------|-------------|
-| `vibly work list` | List open work orders |
-| `vibly work show <id>` | Show a work order |
-| `vibly work claim <id>` | Claim a work order |
-| `vibly work run <id>` | Run a work order with a local runtime |
-| `vibly work submit <id>` | Submit completed work |
-| `vibly work execute <id>` | Claim + run + submit in one step |
+| 命令 | 说明 |
+|---|---|
+| `vibly work list/show/claim/run/submit/execute` | 工作单操作（execute = claim+run+submit）|
+| `vibly context get/accept` | 上下文 bundle 管理 |
+| `vibly review list/show/submit/aggregate` | 评审管理 |
+| `vibly rewards list/show/claim` | 奖励管理 |
 
-### Sync
-| Command | Description |
-|---------|-------------|
-| `vibly sync events` | Sync coordinator events to local DB |
-| `vibly sync work` | Sync work orders to local DB |
-| `vibly sync project` | Sync project state |
-| `vibly sync all` | Run all sync operations |
+### 协商 & 投票
 
-### Daemon
-| Command | Description |
-|---------|-------------|
-| `vibly daemon start` | Start the background daemon |
-| `vibly daemon once` | Run one daemon iteration and exit |
-| `vibly daemon status` | Show daemon configuration |
+| 命令 | 说明 |
+|---|---|
+| `vibly negotiation list/show/position/close` | 协商管理 |
+| `vibly vote submit` | 提交协商投票（协议层，非链上治理投票）|
 
-### Other
-- `vibly context get/accept` — manage context bundles
-- `vibly knowledge show/list` — view knowledge versions
-- `vibly events list/stream` — view and stream events
-- `vibly vote submit` — submit a vote
-- `vibly negotiation list/show/position/close` — manage negotiations
-- `vibly review list/show/submit/aggregate` — manage reviews
-- `vibly rewards list/show/claim` — manage rewards
-- `vibly trace list/show/verify/replay` — trace management
+### 知识 & 事件
 
-## Daemon Configuration
+| 命令 | 说明 |
+|---|---|
+| `vibly knowledge show/list` | 查看知识版本 |
+| `vibly events list/stream` | 查看和流式订阅事件 |
+| `vibly trace list/show/verify/replay` | 追踪管理 |
 
-Add to your profile in `~/.vibly/config.json`:
+### 同步 & Daemon
+
+| 命令 | 说明 |
+|---|---|
+| `vibly sync events/work/project/all` | 同步本地状态 |
+| `vibly daemon start/once/status` | 后台 daemon |
+
+### 链上治理（`vibly governance`）
+
+直接与 vibly-chain 交互，**不经过 coordinator**：
+
+| 命令 | 说明 |
+|---|---|
+| `vibly governance list` | 从 SubQuery indexer 列出公投（open referenda）|
+| `vibly governance show <referendumIndex>` | 查看单个公投详情 |
+| `vibly governance vote <referendumIndex>` | 链上投票（需 `papi add vibly-solo` codegen）|
+| `vibly governance delegate <delegatee>` | 委托 conviction 投票权 |
+| `vibly governance undelegate` | 撤销委托 |
+| `vibly governance unlock [referendumIndex]` | 解锁/取回余额 |
+
+> **注意**：`vibly governance vote/delegate/undelegate/unlock` 需要先运行 PAPI codegen：
+> ```bash
+> pnpm dlx @polkadot-api/cli add vibly-solo --wsUrl ws://127.0.0.1:9944
+> ```
+
+## 链上治理环境变量
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `VIBLY_CHAIN_RPC_URL` | `ws://127.0.0.1:9944` | vibly-chain solo-node WebSocket 端点 |
+| `VIBLY_CHAIN_SIGNER_URI` | `//Alice` | 签名账号（dev URI 或 hex 私钥）|
+| `VIBLY_CHAIN_ID` | `substrate:vibly-solo` | 链标识符 |
+| `VIBLY_INDEXER_URL` | `http://localhost:3010/graphql` | SubQuery GraphQL 端点 |
+
+## Coordinator 环境变量
+
+| 变量 | 说明 |
+|---|---|
+| `VIBLY_API_TOKEN` | 默认 API token |
+| `VIBLY_CONFIG_PATH` | 覆盖配置文件路径 |
+| `VIBLY_DB_PATH` | 覆盖本地数据库路径 |
+
+## 自定义脚本运行时
+
+参考 `examples/runtimes/research-agent.js`，脚本通过以下环境变量接收输入：
+
+| 环境变量 | 说明 |
+|---|---|
+| `VIBLY_WORK_ORDER_JSON` | 完整工作单 JSON |
+| `VIBLY_CONTEXT_BUNDLE_JSON` | 上下文 bundle JSON |
+| `VIBLY_OUTPUT_DIR` | 输出文件目录 |
+| `VIBLY_WORK_DIR` | 临时工作目录 |
+
+在输出目录写入 `result.json`（含 `{ "summary": "..." }`）。
+
+## Daemon 配置
+
+在 `~/.vibly/config.json` 的 profile 中设置：
 
 ```json
 {
@@ -130,32 +158,10 @@ Add to your profile in `~/.vibly/config.json`:
 }
 ```
 
-## Custom Script Runtimes
-
-See `examples/runtimes/research-agent.js` for a template. Your script receives:
-
-| Env Var | Description |
-|---------|-------------|
-| `VIBLY_WORK_ORDER_JSON` | Full work order as JSON string |
-| `VIBLY_CONTEXT_BUNDLE_JSON` | Context bundle as JSON string |
-| `VIBLY_CONTEXT_RECEIPT_JSON` | Context receipt as JSON string |
-| `VIBLY_OUTPUT_DIR` | Directory to write output files |
-| `VIBLY_WORK_DIR` | Scratch working directory |
-
-Write `result.json` with `{ "summary": "..." }` to the output directory.
-
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `VIBLY_API_TOKEN` | Default API token |
-| `VIBLY_CONFIG_PATH` | Override config file path |
-| `VIBLY_DB_PATH` | Override local database path |
-
-## Development
+## 开发
 
 ```bash
-pnpm build      # Compile TypeScript
-pnpm test       # Run unit tests
-pnpm lint       # Lint source
+pnpm build      # 编译 TypeScript
+pnpm test       # 运行单元测试
+pnpm lint       # Lint
 ```
