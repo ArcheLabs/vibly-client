@@ -112,4 +112,27 @@ describe("CoordinatorClient governance reads", () => {
       expect.objectContaining({ method: "GET" }),
     );
   });
+
+  it("submits an OpenGov intent through the coordinator", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          ok: true,
+          data: { receipt: { tx: { txHash: "0xsubmit" }, readbackStatus: "pending_indexer" } },
+        }),
+      ),
+    );
+
+    const result = await client().submitGovernanceOpenGov("intent-1", {
+      actor: "5Alice",
+      submitArgs: { proposal: "0xproposal" },
+    });
+
+    expect(result).toEqual({ receipt: { tx: { txHash: "0xsubmit" }, readbackStatus: "pending_indexer" } });
+    expect(fetch).toHaveBeenCalledWith(
+      "http://coordinator.test/governance/intents/intent-1/submit-opengov",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });

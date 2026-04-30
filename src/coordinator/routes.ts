@@ -64,6 +64,9 @@ export const ROUTES = {
   rewardClaim: (id: string) => `/rewards/${id}/claim`,
 
   governanceMerged: "/governance/merged",
+  governanceIntentSubmitOpenGov: (id: string) => `/governance/intents/${id}/submit-opengov`,
+  governanceIntentReconcileSubject: (id: string) => `/governance/intents/${id}/reconcile-subject`,
+  governanceSubjectVoteOpenGov: (id: string) => `/governance/subjects/${encodeURIComponent(id)}/vote-opengov`,
   governanceSubjects: "/governance/subjects",
   governanceCheckpoint: "/governance/checkpoint",
   governanceBackends: "/governance/backends",

@@ -100,6 +100,9 @@ Coordinator 读路径：
 | `vibly governance subjects [--backend evm-governor]` | 从 coordinator 读取 typed governance subjects |
 | `vibly governance checkpoint [--backend evm-governor]` | 查看 coordinator 的 governance index checkpoint |
 | `vibly governance backends` | 查看已注册 governance backend descriptors、capabilities 与 health/freshness |
+| `vibly governance submit-opengov <intentId> --actor <account>` | Phase E 主路径：通过 coordinator 提交治理 intent |
+| `vibly governance reconcile <intentId> --external-id <referendumIndex>` | 将 intent 与 indexer 回读的 OpenGov subject 关联 |
+| `vibly governance vote-opengov <subjectId> --voter <account> --stance aye` | 通过 coordinator 提交 OpenGov vote 并等待 readback |
 
 Phase D.5 demo 验证建议：
 
@@ -108,6 +111,15 @@ vibly governance backends
 vibly governance merged --backend evm-governor
 vibly governance subjects --backend substrate-opengov
 vibly governance checkpoint --backend evm-governor
+```
+
+Phase E OpenGov 闭环验证建议：
+
+```bash
+vibly governance submit-opengov <intentId> --actor <account>
+vibly governance reconcile <intentId> --external-id <referendumIndex>
+vibly governance vote-opengov <subjectId> --voter <account> --stance aye --weight 2000000000
+vibly governance merged --backend substrate-opengov
 ```
 
 Substrate OpenGov 直链/直 indexer 路径：

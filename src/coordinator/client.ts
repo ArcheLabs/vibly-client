@@ -492,6 +492,53 @@ export class CoordinatorClient {
     return this.list<unknown>(ROUTES.governanceMerged, query);
   }
 
+  async submitGovernanceOpenGov(
+    governanceIntentId: string,
+    input: {
+      actor: string;
+      payload?: unknown;
+      submitArgs?: unknown;
+      externalId?: string;
+      subjectId?: string;
+      metadata?: Record<string, unknown>;
+    },
+  ): Promise<unknown> {
+    return this.request(ROUTES.governanceIntentSubmitOpenGov(governanceIntentId), {
+      method: "POST",
+      body: input,
+      idempotencyKey: randomUUID(),
+    });
+  }
+
+  async reconcileGovernanceSubject(
+    governanceIntentId: string,
+    input: { subjectId?: string; externalId?: string; metadata?: Record<string, unknown> },
+  ): Promise<unknown> {
+    return this.request(ROUTES.governanceIntentReconcileSubject(governanceIntentId), {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  async submitGovernanceVoteOpenGov(
+    subjectId: string,
+    input: {
+      voter: string;
+      stance: string;
+      weight?: string;
+      reason?: string;
+      conviction?: string | number;
+      payload?: unknown;
+      metadata?: Record<string, unknown>;
+    },
+  ): Promise<unknown> {
+    return this.request(ROUTES.governanceSubjectVoteOpenGov(subjectId), {
+      method: "POST",
+      body: input,
+      idempotencyKey: randomUUID(),
+    });
+  }
+
   async listGovernanceSubjects(query?: {
     backend?: string;
     chainId?: string;

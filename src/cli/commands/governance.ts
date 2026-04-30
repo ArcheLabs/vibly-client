@@ -154,6 +154,92 @@ export function registerGovernanceCommands(program: Command): void {
       }
     });
 
+  gov
+    .command("submit-opengov <governanceIntentId>")
+    .description("Submit a governance intent through coordinator-managed Substrate OpenGov action path")
+    .requiredOption("--actor <account>", "Submitting account")
+    .option("--external-id <id>", "Known referendum index for explicit receipt link")
+    .option("--subject-id <id>", "Known coordinator subject id for explicit link")
+    .option("--submit-args-json <json>", "Raw referenda.submit args JSON")
+    .action(async (governanceIntentId: string, opts) => {
+      try {
+        const { client } = getCoordinatorClient();
+        const result = await client.submitGovernanceOpenGov(governanceIntentId, {
+          actor: opts.actor,
+          externalId: opts.externalId,
+          subjectId: opts.subjectId,
+          submitArgs: opts.submitArgsJson ? JSON.parse(opts.submitArgsJson) : undefined,
+        });
+        if (program.opts().json) {
+          process.stdout.write(JSON.stringify(result, jsonReplacer, 2) + "\n");
+        } else {
+          const record = asRecord(result);
+          const receipt = asRecord(record["receipt"]);
+          const tx = asRecord(receipt["tx"]);
+          process.stdout.write(`OpenGov submit recorded: ${String(tx["txHash"] ?? "-")}\n`);
+          process.stdout.write(`Readback: ${String(receipt["readbackStatus"] ?? "pending_indexer")}\n`);
+        }
+      } catch (err) {
+        process.stderr.write(`Error: ${String(err)}\n`);
+        process.exit(1);
+      }
+    });
+
+  gov
+    .command("reconcile <governanceIntentId>")
+    .description("Link a submitted governance intent to an indexed OpenGov subject")
+    .option("--external-id <id>", "Referendum index")
+    .option("--subject-id <id>", "Coordinator subject id")
+    .action(async (governanceIntentId: string, opts) => {
+      try {
+        const { client } = getCoordinatorClient();
+        const result = await client.reconcileGovernanceSubject(governanceIntentId, {
+          externalId: opts.externalId,
+          subjectId: opts.subjectId,
+        });
+        if (program.opts().json) {
+          process.stdout.write(JSON.stringify(result, jsonReplacer, 2) + "\n");
+        } else {
+          const record = asRecord(result);
+          const link = asRecord(record["link"]);
+          process.stdout.write(`Intent linked to subject: ${String(link["subjectId"] ?? "-")}\n`);
+        }
+      } catch (err) {
+        process.stderr.write(`Error: ${String(err)}\n`);
+        process.exit(1);
+      }
+    });
+
+  gov
+    .command("vote-opengov <subjectId>")
+    .description("Submit an OpenGov vote through the coordinator and observe readback through merged views")
+    .requiredOption("--voter <account>", "Voting account")
+    .requiredOption("--stance <stance>", "Vote stance: aye | nay | abstain | split")
+    .option("--weight <planck>", "Vote balance in planck")
+    .option("--conviction <0-6>", "Conviction multiplier", "0")
+    .action(async (subjectId: string, opts) => {
+      try {
+        const { client } = getCoordinatorClient();
+        const result = await client.submitGovernanceVoteOpenGov(subjectId, {
+          voter: opts.voter,
+          stance: opts.stance,
+          weight: opts.weight,
+          conviction: opts.conviction,
+        });
+        if (program.opts().json) {
+          process.stdout.write(JSON.stringify(result, jsonReplacer, 2) + "\n");
+        } else {
+          const receipt = asRecord(asRecord(result)["receipt"]);
+          const tx = asRecord(receipt["tx"]);
+          process.stdout.write(`OpenGov vote recorded: ${String(tx["txHash"] ?? "-")}\n`);
+          process.stdout.write(`Vote readback: ${String(receipt["readbackStatus"] ?? "pending_indexer")}\n`);
+        }
+      } catch (err) {
+        process.stderr.write(`Error: ${String(err)}\n`);
+        process.exit(1);
+      }
+    });
+
   // ── list ──────────────────────────────────────────────────────────────────
   gov
     .command("list")
@@ -416,6 +502,7 @@ function printMergedItems(items: unknown[]): void {
     const subject = asRecord(record["subject"]);
     const status = asRecord(record["status"]);
     const freshness = asRecord(record["freshness"]);
+    const readback = asRecord(record["readback"]);
     const title = String(asRecord(record["intent"])["title"] ?? subject["title"] ?? "(untitled)");
     const checkpoint = asRecord(freshness["checkpoint"]);
     process.stdout.write(
@@ -424,6 +511,9 @@ function printMergedItems(items: unknown[]): void {
     if (freshness["stale"]) {
       process.stdout.write(`  stale${freshness["reason"] ? `:${String(freshness["reason"])}` : ""}`);
     }
+    if (readback["pending"]) process.stdout.write("  pending-indexer");
+    if (readback["submitTxHash"]) process.stdout.write(`  tx=${String(readback["submitTxHash"])}`);
+    if (readback["voteReadbackStatus"]) process.stdout.write(`  votes=${String(readback["voteReadbackStatus"])}`);
     if (checkpoint["observedAt"]) process.stdout.write(`  observed=${String(checkpoint["observedAt"])}`);
     process.stdout.write("\n");
   }
