@@ -17,6 +17,7 @@
   "dependencies": {
     "@concord/adapter-substrate-actions": "workspace:*",
     "@concord/adapter-substrate-indexer": "workspace:*",
+    "@vibly/coordinator-http-contract": "workspace:*",
     "better-sqlite3": "^9.6.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",

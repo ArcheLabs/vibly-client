@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { CoordinatorApiError } from "./errors.js";
 import { buildQueryString } from "./pagination.js";
+import { path } from "./contractPaths.js";
 import { ROUTES } from "./routes.js";
 import type {
   Agent,
@@ -134,7 +135,7 @@ export class CoordinatorClient {
   // ── Health ──────────────────────────────────────────────────────────────────
 
   async health(): Promise<HealthResponse> {
-    return this.request<HealthResponse>(ROUTES.health);
+    return this.request<HealthResponse>(path("/health"));
   }
 
   // ── Principals ──────────────────────────────────────────────────────────────
