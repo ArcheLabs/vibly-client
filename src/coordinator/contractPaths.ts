@@ -9,7 +9,7 @@
  *
  * Example:
  *
- *   await this.request<HealthResponse>(path("/health"));
+ *   await this.contract.GET(path("/health"));
  *
  * If the OpenAPI contract removes `/health`, the type system fails the
  * build (the literal is no longer assignable to `KnownPath`). New paths

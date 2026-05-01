@@ -1,23 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { CoordinatorApiError } from "./errors.js";
-import { buildQueryString } from "./pagination.js";
+import { unwrapEnvelope } from "@vibly/coordinator-http-contract/client";
+import { CoordinatorApiError as ContractApiError } from "@vibly/coordinator-http-contract/errors";
+import { createCliContractClient, type ContractCoordinatorClient } from "./contractClient.js";
 import { path } from "./contractPaths.js";
-import { ROUTES } from "./routes.js";
+import { CoordinatorApiError } from "./errors.js";
 import type {
   Agent,
-  ApiResponse,
   ArtifactRef,
   ContextBundle,
   ContextReceipt,
   EventEnvelope,
   HealthResponse,
   KnowledgeVersion,
-  ListResponse,
   NegotiationInstance,
+  Objective,
   PageMeta,
   Principal,
   Project,
-  Objective,
   RewardIntent,
   ReviewRecord,
   RuntimeBinding,
@@ -36,106 +35,34 @@ export interface CoordinatorClientOptions {
   retryBaseMs?: number;
 }
 
-interface RequestOptions {
-  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-  body?: unknown;
-  idempotencyKey?: string;
-  retry?: boolean;
-}
-
 export class CoordinatorClient {
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly maxRetries: number;
   private readonly retryBaseMs: number;
+  private readonly contract: ContractCoordinatorClient;
 
   constructor(opts: CoordinatorClientOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/$/, "");
     this.token = opts.token;
     this.maxRetries = opts.maxRetries ?? 2;
     this.retryBaseMs = opts.retryBaseMs ?? 500;
-  }
-
-  // ── Core request method ─────────────────────────────────────────────────────
-
-  private async request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-    const { method = "GET", body, idempotencyKey, retry } = opts;
-    const url = `${this.baseUrl}${path}`;
-    const headers: Record<string, string> = {
-      "Authorization": `Bearer ${this.token}`,
-      "Content-Type": "application/json",
-    };
-    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
-
-    const shouldRetry = retry ?? method === "GET";
-    let lastError: Error | undefined;
-
-    for (let attempt = 0; attempt <= (shouldRetry ? this.maxRetries : 0); attempt++) {
-      if (attempt > 0) {
-        await sleep(this.retryBaseMs * 2 ** (attempt - 1));
-      }
-      try {
-        const res = await fetch(url, {
-          method,
-          headers,
-          body: body !== undefined ? JSON.stringify(body) : undefined,
-        });
-
-        if (!res.ok) {
-          let apiCode: string | undefined;
-          let apiMessage = `HTTP ${res.status}`;
-          try {
-            const j = (await res.json()) as ApiResponse;
-            apiMessage = j.error?.message ?? apiMessage;
-            apiCode = j.error?.code;
-          } catch { /* ignore parse errors */ }
-          throw new CoordinatorApiError(res.status, apiMessage, apiCode);
-        }
-
-        const json = (await res.json()) as ApiResponse<T>;
-        if (!json.ok) {
-          throw new CoordinatorApiError(
-            res.status,
-            json.error?.message ?? "API returned ok=false",
-            json.error?.code,
-          );
-        }
-        return json.data as T;
-      } catch (e) {
-        if (e instanceof CoordinatorApiError) {
-          // Don't retry 4xx errors
-          if (e.status >= 400 && e.status < 500) throw e;
-        }
-        lastError = e instanceof Error ? e : new Error(String(e));
-        if (!shouldRetry) throw lastError;
-      }
-    }
-    throw lastError!;
-  }
-
-  private async list<T>(path: string, query?: Record<string, string | number | boolean | undefined>): Promise<{ items: T[]; meta?: PageMeta }> {
-    const qs = query ? buildQueryString(query) : "";
-    const url = `${path}${qs}`;
-    const res = await fetch(`${this.baseUrl}${url}`, {
-      headers: { "Authorization": `Bearer ${this.token}` },
+    this.contract = createCliContractClient({
+      baseUrl: this.baseUrl,
+      token: this.token,
+      maxRetries: this.maxRetries,
+      retryBaseMs: this.retryBaseMs,
     });
-    if (!res.ok) {
-      const apiCode = undefined;
-      throw new CoordinatorApiError(res.status, `HTTP ${res.status}`, apiCode);
-    }
-    const json = (await res.json()) as ApiResponse & { items?: T[]; data?: T[] | { items?: T[] }; meta?: PageMeta };
-    const raw = json.data;
-    if (Array.isArray(raw)) return { items: raw, meta: json.meta };
-    if (raw && typeof raw === "object" && "items" in raw) {
-      return { items: (raw as { items: T[] }).items ?? [], meta: json.meta };
-    }
-    return { items: (raw as T[]) ?? [], meta: json.meta };
   }
 
   // ── Health ──────────────────────────────────────────────────────────────────
 
   async health(): Promise<HealthResponse> {
-    return this.request<HealthResponse>(path("/health"));
+    return runContract(async () => {
+      const result = await this.contract.GET(path("/health"));
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapEnvelope<HealthResponse>(result.data);
+    });
   }
 
   // ── Principals ──────────────────────────────────────────────────────────────
@@ -147,32 +74,49 @@ export class CoordinatorClient {
     identityBindings?: unknown[];
     addressBindings?: unknown[];
   }): Promise<Principal> {
-    const data = await this.request<{ principal: Principal }>(ROUTES.principals, {
-      method: "POST",
-      body: input,
-      idempotencyKey: randomUUID(),
+    return runContract(async () => {
+      const result = await this.contract.POST("/principals", {
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<Principal>(unwrapEnvelope(result.data), "principal");
     });
-    return data.principal;
   }
 
   async listPrincipals(query?: { limit?: number; cursor?: string }): Promise<{ items: Principal[]; meta?: PageMeta }> {
-    return this.list<Principal>(ROUTES.principals, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/principals", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<Principal>(result.data, "items");
+    });
   }
 
   async getPrincipal(id: string): Promise<Principal> {
-    const data = await this.request<{ principal: Principal }>(ROUTES.principal(id));
-    return data.principal;
+    return runContract(async () => {
+      const result = await this.contract.GET("/principals/{principalId}", {
+        params: { path: { principalId: id } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<Principal>(unwrapEnvelope(result.data), "principal");
+    });
   }
 
   async bindPrincipalAddress(
     principalId: string,
     input: { chain: string; address: string; publicKey?: string; proof?: string; status?: string },
   ): Promise<Principal> {
-    const data = await this.request<{ principal: Principal }>(
-      ROUTES.principalIdentities(principalId),
-      { method: "POST", body: input, idempotencyKey: randomUUID() },
-    );
-    return data.principal;
+    return runContract(async () => {
+      const result = await this.contract.POST("/principals/{principalId}/identities", {
+        params: { path: { principalId } },
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<Principal>(unwrapEnvelope(result.data), "principal");
+    });
   }
 
   // ── Agents ──────────────────────────────────────────────────────────────────
@@ -185,29 +129,45 @@ export class CoordinatorClient {
     eligibleRoles?: string[];
     metadata?: Record<string, unknown>;
   }): Promise<Agent> {
-    const data = await this.request<{ agent: Agent }>(ROUTES.agents, {
-      method: "POST",
-      body: input,
-      idempotencyKey: randomUUID(),
+    return runContract(async () => {
+      const result = await this.contract.POST("/agents", {
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<Agent>(unwrapEnvelope(result.data), "agent");
     });
-    return data.agent;
   }
 
   async listAgents(query?: { status?: string; limit?: number; cursor?: string }): Promise<{ items: Agent[]; meta?: PageMeta }> {
-    return this.list<Agent>(ROUTES.agents, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/agents", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<Agent>(result.data, "items");
+    });
   }
 
   async getAgent(id: string): Promise<Agent> {
-    const data = await this.request<{ agent: Agent }>(ROUTES.agent(id));
-    return data.agent;
+    return runContract(async () => {
+      const result = await this.contract.GET("/agents/{agentId}", {
+        params: { path: { agentId: id } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<Agent>(unwrapEnvelope(result.data), "agent");
+    });
   }
 
   async changeAgentStatus(agentId: string, input: { nextStatus: string; reason?: string }): Promise<Agent> {
-    const data = await this.request<{ agent: Agent }>(ROUTES.agentStatus(agentId), {
-      method: "POST",
-      body: input,
+    return runContract(async () => {
+      const result = await this.contract.POST("/agents/{agentId}/status", {
+        params: { path: { agentId } },
+        body: input as never,
     });
-    return data.agent;
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<Agent>(unwrapEnvelope(result.data), "agent");
+    });
   }
 
   async createRuntimeBinding(
@@ -219,15 +179,26 @@ export class CoordinatorClient {
       metadata?: Record<string, unknown>;
     },
   ): Promise<RuntimeBinding> {
-    const data = await this.request<{ runtimeBinding: RuntimeBinding }>(
-      ROUTES.agentRuntimeBindings(agentId),
-      { method: "POST", body: input, idempotencyKey: randomUUID() },
-    );
-    return data.runtimeBinding;
+    return runContract(async () => {
+      const result = await this.contract.POST("/agents/{agentId}/runtime-bindings", {
+        params: { path: { agentId } },
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<RuntimeBinding>(unwrapEnvelope(result.data), "runtimeBinding");
+    });
   }
 
   async listRuntimeBindings(agentId: string): Promise<{ items: RuntimeBinding[] }> {
-    return this.list<RuntimeBinding>(ROUTES.agentRuntimeBindings(agentId));
+    return runContract(async () => {
+      const result = await this.contract.GET("/agents/{agentId}/runtime-bindings", {
+        params: { path: { agentId } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      const list = toList<RuntimeBinding>(result.data, "items");
+      return { items: list.items };
+    });
   }
 
   // ── Projects ─────────────────────────────────────────────────────────────────
@@ -239,31 +210,56 @@ export class CoordinatorClient {
     sponsorPrincipalId: string;
     metadata?: Record<string, unknown>;
   }): Promise<Project> {
-    const data = await this.request<{ project: Project }>(ROUTES.projects, {
-      method: "POST",
-      body: input,
-      idempotencyKey: randomUUID(),
+    return runContract(async () => {
+      const result = await this.contract.POST("/projects", {
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<Project>(unwrapEnvelope(result.data), "project");
     });
-    return data.project;
   }
 
   async listProjects(query?: { status?: string; limit?: number; cursor?: string }): Promise<{ items: Project[]; meta?: PageMeta }> {
-    return this.list<Project>(ROUTES.projects, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/projects", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<Project>(result.data, "items");
+    });
   }
 
   async getProject(id: string): Promise<Project> {
-    const data = await this.request<{ project: Project }>(ROUTES.project(id));
-    return data.project;
+    return runContract(async () => {
+      const result = await this.contract.GET("/projects/{projectId}", {
+        params: { path: { projectId: id } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<Project>(unwrapEnvelope(result.data), "project");
+    });
   }
 
   async listObjectives(projectId: string): Promise<{ items: Objective[] }> {
-    return this.list<Objective>(ROUTES.projectObjectives(projectId));
+    return runContract(async () => {
+      const result = await this.contract.GET("/projects/{projectId}/objectives", {
+        params: { path: { projectId } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      const list = toList<Objective>(result.data, "items");
+      return { items: list.items };
+    });
   }
 
   async getBoundary(projectId: string): Promise<unknown | null> {
     try {
-      const data = await this.request<{ boundary: unknown }>(ROUTES.projectBoundary(projectId));
-      return (data as { boundary: unknown }).boundary ?? null;
+      return await runContract(async () => {
+        const result = await this.contract.GET("/projects/{projectId}/boundary", {
+          params: { path: { projectId } },
+        });
+        if (!result.response.ok) throw fromContract(result.error, result.response);
+        return unwrapKey<unknown>(unwrapEnvelope(result.data), "boundary") ?? null;
+      });
     } catch (e) {
       if (e instanceof CoordinatorApiError && e.isNotFound()) return null;
       throw e;
@@ -277,39 +273,51 @@ export class CoordinatorClient {
     actorId: string;
     artifacts?: ArtifactRef[];
   }): Promise<ContextBundle> {
-    const data = await this.request<{ bundle: ContextBundle }>(ROUTES.contextBundles, {
-      method: "POST",
-      body: input,
-      idempotencyKey: randomUUID(),
+    return runContract(async () => {
+      const result = await this.contract.POST("/context/bundles", {
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<ContextBundle>(unwrapEnvelope(result.data), "bundle");
     });
-    return data.bundle;
   }
 
   async getContextBundle(id: string): Promise<ContextBundle> {
-    const data = await this.request<{ bundle: ContextBundle }>(ROUTES.contextBundle(id));
-    return data.bundle;
+    return runContract(async () => {
+      const result = await this.contract.GET("/context/bundles/{bundleId}", {
+        params: { path: { bundleId: id } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<ContextBundle>(unwrapEnvelope(result.data), "bundle");
+    });
   }
 
   async acceptContextBundle(input: {
     contextBundleId: string;
     actorId: string;
   }): Promise<ContextReceipt> {
-    const data = await this.request<{ receipt: ContextReceipt }>(ROUTES.contextReceipts, {
-      method: "POST",
-      body: input,
-      idempotencyKey: randomUUID(),
+    return runContract(async () => {
+      const result = await this.contract.POST("/context/receipts", {
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<ContextReceipt>(unwrapEnvelope(result.data), "receipt");
     });
-    return data.receipt;
   }
 
   // ── State ────────────────────────────────────────────────────────────────────
 
   async getLatestState(projectId: string): Promise<StateView | null> {
     try {
-      const data = await this.request<{ stateView: StateView }>(
-        ROUTES.projectStateLatest(projectId),
-      );
-      return (data as { stateView: StateView }).stateView ?? null;
+      return await runContract(async () => {
+        const result = await this.contract.GET("/projects/{projectId}/state/latest", {
+          params: { path: { projectId } },
+        });
+        if (!result.response.ok) throw fromContract(result.error, result.response);
+        return unwrapKey<StateView>(unwrapEnvelope(result.data), "stateView") ?? null;
+      });
     } catch (e) {
       if (e instanceof CoordinatorApiError && e.isNotFound()) return null;
       throw e;
@@ -320,8 +328,11 @@ export class CoordinatorClient {
 
   async getLatestKnowledge(): Promise<KnowledgeVersion | null> {
     try {
-      const data = await this.request<{ version: KnowledgeVersion }>(ROUTES.knowledgeLatest);
-      return (data as { version: KnowledgeVersion }).version ?? null;
+      return await runContract(async () => {
+        const result = await this.contract.GET("/knowledge/latest");
+        if (!result.response.ok) throw fromContract(result.error, result.response);
+        return unwrapKey<KnowledgeVersion>(unwrapEnvelope(result.data), "version") ?? null;
+      });
     } catch (e) {
       if (e instanceof CoordinatorApiError && e.isNotFound()) return null;
       throw e;
@@ -329,39 +340,71 @@ export class CoordinatorClient {
   }
 
   async getKnowledgeVersion(id: string): Promise<KnowledgeVersion> {
-    const data = await this.request<{ version: KnowledgeVersion }>(ROUTES.knowledgeVersion(id));
-    return (data as { version: KnowledgeVersion }).version;
+    return runContract(async () => {
+      const result = await this.contract.GET("/knowledge/versions/{versionId}", {
+        params: { path: { versionId: id } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<KnowledgeVersion>(unwrapEnvelope(result.data), "version");
+    });
   }
 
   async listKnowledgeVersions(query?: { limit?: number; cursor?: string }): Promise<{ items: KnowledgeVersion[] }> {
-    return this.list<KnowledgeVersion>(ROUTES.knowledgeVersions, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/knowledge/versions", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      const list = toList<KnowledgeVersion>(result.data, "items");
+      return { items: list.items };
+    });
   }
 
   // ── Work Orders ──────────────────────────────────────────────────────────────
 
   async listOpenWorkOrders(query?: { projectId?: string; limit?: number; cursor?: string }): Promise<{ items: WorkOrder[]; meta?: PageMeta }> {
-    return this.list<WorkOrder>(ROUTES.workOrdersOpen, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/work-orders/open", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<WorkOrder>(result.data, "items");
+    });
   }
 
   async listWorkOrders(query?: { projectId?: string; status?: string; limit?: number; cursor?: string }): Promise<{ items: WorkOrder[]; meta?: PageMeta }> {
-    return this.list<WorkOrder>(ROUTES.workOrders, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/work-orders", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<WorkOrder>(result.data, "items");
+    });
   }
 
   async getWorkOrder(id: string): Promise<WorkOrder> {
-    const data = await this.request<{ workOrder: WorkOrder }>(ROUTES.workOrder(id));
-    return (data as { workOrder: WorkOrder }).workOrder;
+    return runContract(async () => {
+      const result = await this.contract.GET("/work-orders/{workOrderId}", {
+        params: { path: { workOrderId: id } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<WorkOrder>(unwrapEnvelope(result.data), "workOrder");
+    });
   }
 
   async claimWorkOrder(
     workOrderId: string,
     input: { actorId: string; leaseMs?: number },
   ): Promise<WorkClaim> {
-    const data = await this.request<{ claim: WorkClaim }>(ROUTES.workOrderClaim(workOrderId), {
-      method: "POST",
-      body: input,
-      idempotencyKey: randomUUID(),
+    return runContract(async () => {
+      const result = await this.contract.POST("/work-orders/{workOrderId}/claim", {
+        params: { path: { workOrderId } },
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<WorkClaim>(unwrapEnvelope(result.data), "claim");
     });
-    return (data as { claim: WorkClaim }).claim;
   }
 
   async submitWorkOrder(
@@ -374,50 +417,65 @@ export class CoordinatorClient {
       summary: string;
     },
   ): Promise<Submission> {
-    const data = await this.request<{ submission: Submission }>(
-      ROUTES.workOrderSubmit(workOrderId),
-      {
-        method: "POST",
-        body: input,
-        idempotencyKey: randomUUID(),
-      },
-    );
-    return (data as { submission: Submission }).submission;
+    return runContract(async () => {
+      const result = await this.contract.POST("/work-orders/{workOrderId}/submit", {
+        params: { path: { workOrderId } },
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<Submission>(unwrapEnvelope(result.data), "submission");
+    });
   }
 
   // ── Negotiations ─────────────────────────────────────────────────────────────
 
   async listNegotiations(query?: { status?: string; projectId?: string; limit?: number; cursor?: string }): Promise<{ items: NegotiationInstance[]; meta?: PageMeta }> {
-    return this.list<NegotiationInstance>(ROUTES.negotiations, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/negotiations", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<NegotiationInstance>(result.data, "items");
+    });
   }
 
   async getNegotiation(id: string): Promise<NegotiationInstance> {
-    const data = await this.request<{ negotiation: NegotiationInstance }>(ROUTES.negotiation(id));
-    return (data as { negotiation: NegotiationInstance }).negotiation;
+    return runContract(async () => {
+      const result = await this.contract.GET("/negotiations/{negotiationId}", {
+        params: { path: { negotiationId: id } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<NegotiationInstance>(unwrapEnvelope(result.data), "negotiation");
+    });
   }
 
   async submitNegotiationPosition(
     negotiationId: string,
     input: { actorId: string; stance: string; rationale: string; score?: number },
   ): Promise<NegotiationInstance> {
-    const data = await this.request<{ negotiation: NegotiationInstance }>(
-      ROUTES.negotiationPositions(negotiationId),
-      {
-        method: "POST",
-        body: input,
-        idempotencyKey: randomUUID(),
-      },
-    );
-    return (data as { negotiation: NegotiationInstance }).negotiation;
+    return runContract(async () => {
+      const result = await this.contract.POST("/negotiations/{negotiationId}/positions", {
+        params: { path: { negotiationId } },
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<NegotiationInstance>(unwrapEnvelope(result.data), "negotiation");
+    });
   }
 
   async closeNegotiation(
     negotiationId: string,
     input?: { source?: string },
   ): Promise<unknown> {
-    return this.request(ROUTES.negotiationClose(negotiationId), {
-      method: "POST",
-      body: input ?? {},
+    return runContract(async () => {
+      const result = await this.contract.POST("/negotiations/{negotiationId}/close", {
+        params: { path: { negotiationId } },
+        body: (input ?? {}) as never,
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapEnvelope<unknown>(result.data);
     });
   }
 
@@ -427,15 +485,24 @@ export class CoordinatorClient {
     target: { kind: string; submissionId?: string; candidateId?: string; actionId?: string };
     requestedBy: string;
   }): Promise<unknown> {
-    return this.request(ROUTES.reviewRequests, {
-      method: "POST",
-      body: input,
-      idempotencyKey: randomUUID(),
+    return runContract(async () => {
+      const result = await this.contract.POST("/reviews/requests", {
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapEnvelope<unknown>(result.data);
     });
   }
 
   async listReviews(query?: { targetKind?: string; reviewerId?: string; result?: string; limit?: number }): Promise<{ items: ReviewRecord[]; meta?: PageMeta }> {
-    return this.list<ReviewRecord>(ROUTES.reviews, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/reviews", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<ReviewRecord>(result.data, "items");
+    });
   }
 
   async submitReview(input: {
@@ -447,42 +514,62 @@ export class CoordinatorClient {
     contextBundleId: string;
     evidence?: unknown[];
   }): Promise<ReviewRecord> {
-    const data = await this.request<{ review: ReviewRecord }>(ROUTES.reviews, {
-      method: "POST",
-      body: input,
-      idempotencyKey: randomUUID(),
+    return runContract(async () => {
+      const result = await this.contract.POST("/reviews", {
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<ReviewRecord>(unwrapEnvelope(result.data), "review");
     });
-    return (data as { review: ReviewRecord }).review;
   }
 
   async aggregateReviews(input: {
     target: { kind: string; submissionId?: string; candidateId?: string; actionId?: string };
   }): Promise<unknown> {
-    return this.request(ROUTES.reviewAggregate, {
-      method: "POST",
-      body: input,
+    return runContract(async () => {
+      const result = await this.contract.POST("/reviews/aggregate", {
+        body: input as never,
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapEnvelope<unknown>(result.data);
     });
   }
 
   // ── Rewards ──────────────────────────────────────────────────────────────────
 
   async listRewards(query?: { actorId?: string; status?: string; limit?: number; cursor?: string }): Promise<{ items: RewardIntent[]; meta?: PageMeta }> {
-    return this.list<RewardIntent>(ROUTES.rewards, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/rewards", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<RewardIntent>(result.data, "items");
+    });
   }
 
   async getReward(id: string): Promise<RewardIntent> {
-    const data = await this.request<{ reward: RewardIntent }>(ROUTES.reward(id));
-    return (data as { reward: RewardIntent }).reward;
+    return runContract(async () => {
+      const result = await this.contract.GET("/rewards/{rewardIntentId}", {
+        params: { path: { rewardIntentId: id } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<RewardIntent>(unwrapEnvelope(result.data), "reward");
+    });
   }
 
   async claimReward(
     rewardIntentId: string,
     input: { actorId: string },
   ): Promise<unknown> {
-    return this.request(ROUTES.rewardClaim(rewardIntentId), {
-      method: "POST",
-      body: input,
-      idempotencyKey: randomUUID(),
+    return runContract(async () => {
+      const result = await this.contract.POST("/rewards/{rewardIntentId}/claim", {
+        params: { path: { rewardIntentId } },
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapEnvelope<unknown>(result.data);
     });
   }
 
@@ -494,7 +581,13 @@ export class CoordinatorClient {
     limit?: number;
     cursor?: string;
   }): Promise<{ items: unknown[]; meta?: PageMeta }> {
-    return this.list<unknown>(ROUTES.governanceMerged, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/governance/merged", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<unknown>(result.data, "items");
+    });
   }
 
   async submitGovernanceOpenGov(
@@ -508,10 +601,14 @@ export class CoordinatorClient {
       metadata?: Record<string, unknown>;
     },
   ): Promise<unknown> {
-    return this.request(ROUTES.governanceIntentSubmitOpenGov(governanceIntentId), {
-      method: "POST",
-      body: input,
-      idempotencyKey: randomUUID(),
+    return runContract(async () => {
+      const result = await this.contract.POST("/governance/intents/{governanceIntentId}/submit-opengov", {
+        params: { path: { governanceIntentId } },
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapEnvelope<unknown>(result.data);
     });
   }
 
@@ -519,9 +616,13 @@ export class CoordinatorClient {
     governanceIntentId: string,
     input: { subjectId?: string; externalId?: string; metadata?: Record<string, unknown> },
   ): Promise<unknown> {
-    return this.request(ROUTES.governanceIntentReconcileSubject(governanceIntentId), {
-      method: "POST",
-      body: input,
+    return runContract(async () => {
+      const result = await this.contract.POST("/governance/intents/{governanceIntentId}/reconcile-subject", {
+        params: { path: { governanceIntentId } },
+        body: input as never,
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapEnvelope<unknown>(result.data);
     });
   }
 
@@ -537,10 +638,14 @@ export class CoordinatorClient {
       metadata?: Record<string, unknown>;
     },
   ): Promise<unknown> {
-    return this.request(ROUTES.governanceSubjectVoteOpenGov(subjectId), {
-      method: "POST",
-      body: input,
-      idempotencyKey: randomUUID(),
+    return runContract(async () => {
+      const result = await this.contract.POST("/governance/subjects/{subjectId}/vote-opengov", {
+        params: { path: { subjectId } },
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapEnvelope<unknown>(result.data);
     });
   }
 
@@ -551,22 +656,40 @@ export class CoordinatorClient {
     limit?: number;
     cursor?: string;
   }): Promise<{ items: unknown[]; meta?: PageMeta }> {
-    return this.list<unknown>(ROUTES.governanceSubjects, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/governance/subjects", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<unknown>(result.data, "items");
+    });
   }
 
   async getGovernanceCheckpoint(query?: {
     backend?: string;
     chainId?: string;
   }): Promise<{ checkpoint: unknown | null; items?: unknown[] }> {
-    const qs = query ? buildQueryString(query) : "";
-    return this.request<{ checkpoint: unknown | null; items?: unknown[] }>(
-      `${ROUTES.governanceCheckpoint}${qs}`,
-    );
+    return runContract(async () => {
+      const result = await this.contract.GET("/governance/checkpoint", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      const payload = unwrapEnvelope<{ checkpoint?: unknown | null; items?: unknown[] }>(result.data);
+      return {
+        checkpoint: payload?.checkpoint ?? null,
+        items: Array.isArray(payload?.items) ? payload.items : undefined,
+      };
+    });
   }
 
   async listGovernanceBackends(): Promise<{ items: unknown[] }> {
-    const data = await this.request<{ backends?: unknown[] }>(ROUTES.governanceBackends);
-    return { items: data.backends ?? [] };
+    return runContract(async () => {
+      const result = await this.contract.GET("/governance/backends");
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      const payload = unwrapEnvelope<Record<string, unknown>>(result.data);
+      const items = extractArray(payload, "backends");
+      return { items };
+    });
   }
 
   // ── Events ───────────────────────────────────────────────────────────────────
@@ -578,64 +701,139 @@ export class CoordinatorClient {
     limit?: number;
     cursor?: string;
   }): Promise<{ items: EventEnvelope[]; meta?: PageMeta }> {
-    return this.list<EventEnvelope>(ROUTES.events, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/events", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<EventEnvelope>(result.data, "items");
+    });
   }
 
   async getEvent(id: string): Promise<EventEnvelope> {
-    const data = await this.request<{ event: EventEnvelope }>(ROUTES.event(id));
-    return (data as { event: EventEnvelope }).event;
+    return runContract(async () => {
+      const result = await this.contract.GET("/events/{eventId}", {
+        params: { path: { eventId: id } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<EventEnvelope>(unwrapEnvelope(result.data), "event");
+    });
   }
 
   // ── Traces ───────────────────────────────────────────────────────────────────
 
   async listTraces(query?: { limit?: number; cursor?: string }): Promise<{ items: unknown[]; meta?: PageMeta }> {
-    return this.list<unknown>(ROUTES.traces, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/traces", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<unknown>(result.data, "items");
+    });
   }
 
   async getTrace(id: string): Promise<unknown> {
-    return this.request(ROUTES.trace(id));
+    return runContract(async () => {
+      const result = await this.contract.GET("/traces/{traceId}", {
+        params: { path: { traceId: id } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<unknown>(unwrapEnvelope(result.data), "trace");
+    });
   }
 
   async verifyTrace(id: string): Promise<unknown> {
-    return this.request(ROUTES.traceVerify(id), { method: "POST", body: {} });
+    return runContract(async () => {
+      const result = await this.contract.POST("/traces/{traceId}/verify", {
+        params: { path: { traceId: id } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapEnvelope<unknown>(result.data);
+    });
   }
 
   async replayTrace(id: string): Promise<unknown> {
-    return this.request(ROUTES.traceReplay(id), { method: "POST", body: {} });
+    return runContract(async () => {
+      const result = await this.contract.POST("/traces/{traceId}/replay", {
+        params: { path: { traceId: id } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapEnvelope<unknown>(result.data);
+    });
   }
 
   // ── Phase F ──────────────────────────────────────────────────────────────────
 
-  async runPhaseFSmoke(): Promise<unknown> {
-    return this.request(ROUTES.phaseFSmoke, { method: "POST", body: {} });
+  async runAgentCollaborationScenario(): Promise<unknown> {
+    return runContract(async () => {
+      const result = await this.contract.POST("/dev/scenarios/agent-collaboration/runs", {
+        body: {} as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<unknown>(unwrapEnvelope(result.data), "run");
+    });
   }
 
-  async listPhaseFRuns(query?: { limit?: number; cursor?: string }): Promise<{ items: unknown[]; meta?: PageMeta }> {
-    return this.list<unknown>(ROUTES.phaseFRuns, query);
+  async listAgentCollaborationScenarioRuns(query?: { limit?: number; cursor?: string }): Promise<{ items: unknown[]; meta?: PageMeta }> {
+    return runContract(async () => {
+      const result = await this.contract.GET("/dev/scenarios/agent-collaboration/runs", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<unknown>(result.data, "items");
+    });
   }
 
   // ── Phase H ──────────────────────────────────────────────────────────────────
 
-  async runPhaseHSmoke(): Promise<unknown> {
-    return this.request(ROUTES.phaseHSmoke, { method: "POST", body: {} });
+  async runIncentiveRiskScenario(): Promise<unknown> {
+    return runContract(async () => {
+      const result = await this.contract.POST("/dev/scenarios/incentive-risk/runs", {
+        body: {} as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<unknown>(unwrapEnvelope(result.data), "run");
+    });
   }
 
-  async listPhaseHRuns(query?: { projectId?: string; limit?: number; cursor?: string }): Promise<{ items: unknown[]; meta?: PageMeta }> {
-    return this.list<unknown>(ROUTES.phaseHRuns, query);
+  async listIncentiveRiskScenarioRuns(query?: { projectId?: string; limit?: number; cursor?: string }): Promise<{ items: unknown[]; meta?: PageMeta }> {
+    return runContract(async () => {
+      const result = await this.contract.GET("/dev/scenarios/incentive-risk/runs", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<unknown>(result.data, "items");
+    });
   }
 
-  async getPhaseHOverview(projectId: string): Promise<unknown> {
-    return this.request(ROUTES.phaseHOverview(projectId));
+  async getProjectOverview(projectId: string): Promise<unknown> {
+    return runContract(async () => {
+      const result = await this.contract.GET("/projects/{projectId}/overview", {
+        params: { path: { projectId } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<unknown>(unwrapEnvelope(result.data), "overview");
+    });
   }
 
   async listGuardianRequests(query?: { projectId?: string; actionId?: string; status?: string; limit?: number; cursor?: string }): Promise<{ items: unknown[]; meta?: PageMeta }> {
-    return this.list<unknown>(ROUTES.guardianRequests, query);
+    return runContract(async () => {
+      const result = await this.contract.GET("/guardian-requests", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return toList<unknown>(result.data, "items");
+    });
   }
 
   /** Base URL for SSE stream */
   getStreamUrl(projectId?: string): string {
-    if (projectId) return `${this.baseUrl}${ROUTES.projectStream(projectId)}`;
-    return `${this.baseUrl}${ROUTES.streamEvents}`;
+    if (projectId) {
+      return `${this.baseUrl}${path("/projects/{projectId}/stream").replace("{projectId}", encodeURIComponent(projectId))}`;
+    }
+    return `${this.baseUrl}${path("/streams/events")}`;
   }
 
   getAuthToken(): string {
@@ -647,6 +845,69 @@ export class CoordinatorClient {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function idempotencyHeaders(): Record<string, string> {
+  return { "Idempotency-Key": randomUUID() };
+}
+
+function queryFromInput(input?: Record<string, string | number | boolean | undefined>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(input ?? {})) {
+    if (value === undefined || value === "") continue;
+    out[key] = String(value);
+  }
+  return out;
+}
+
+function unwrapKey<T>(value: unknown, key: string): T {
+  if (value && typeof value === "object" && key in value) return (value as Record<string, T>)[key];
+  return value as T;
+}
+
+function extractArray(value: unknown, preferredKey?: string): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return [];
+  const record = value as Record<string, unknown>;
+  if (preferredKey && Array.isArray(record[preferredKey])) return record[preferredKey] as unknown[];
+  for (const item of Object.values(record)) {
+    if (Array.isArray(item)) return item;
+  }
+  return [];
+}
+
+function toList<T>(payload: unknown, preferredKey?: string): { items: T[]; meta?: PageMeta } {
+  const data = unwrapEnvelope<unknown>(payload);
+  const items = extractArray(data, preferredKey) as T[];
+  const env = payload as { page?: Partial<PageMeta>; meta?: Partial<PageMeta> };
+  const rawMeta = env.page ?? env.meta;
+  if (!rawMeta || typeof rawMeta !== "object") return { items };
+  return {
+    items,
+    meta: {
+      limit: Number(rawMeta.limit ?? items.length),
+      nextCursor: (rawMeta.nextCursor as string | null | undefined) ?? null,
+      total: rawMeta.total !== undefined ? Number(rawMeta.total) : undefined,
+    },
+  };
+}
+
+function fromContract(error: unknown, response: Response | undefined): CoordinatorApiError {
+  if (error instanceof ContractApiError) {
+    return new CoordinatorApiError(error.status, error.message, error.code);
+  }
+  const status = response?.status ?? 0;
+  const failure = error && typeof error === "object" ? (error as { error?: { code?: string; message?: string } }) : {};
+  return new CoordinatorApiError(
+    status,
+    failure.error?.message ?? "Coordinator request failed",
+    failure.error?.code ?? (status > 0 ? `HTTP_${status}` : undefined),
+  );
+}
+
+async function runContract<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof ContractApiError) throw fromContract(err, undefined);
+    throw err;
+  }
 }

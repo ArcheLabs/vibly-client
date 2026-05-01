@@ -1,9 +1,9 @@
 import type { Command } from "commander";
-import { CoordinatorClient } from "../../coordinator/client.js";
-import { loadActiveProfile, requireApiToken, requirePrincipalId } from "../../config/profiles.js";
-import { saveConfig } from "../../config/config.js";
-import { outputOk, outputErr, printOutput } from "../../domain/apiTypes.js";
-import { ClientError } from "../../domain/errors.js";
+import { requirePrincipalId } from "../../../config/profiles.js";
+import { saveConfig } from "../../../config/config.js";
+import { outputOk, printOutput } from "../../../domain/apiTypes.js";
+import { getCoordinatorClient } from "../shared/client.js";
+import { handleCliError } from "../shared/errors.js";
 
 export function registerPrincipalCommands(program: Command): void {
   const principal = program.command("principal").description("Manage principals");
@@ -17,7 +17,7 @@ export function registerPrincipalCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
-        const { client, config, profile } = getClient();
+        const { client, config, profile } = getCoordinatorClient();
 
         const p = await client.registerPrincipal({
           kind: opts.kind as string,
@@ -34,7 +34,7 @@ export function registerPrincipalCommands(program: Command): void {
           `Registered principal: ${String((d as { id: string }).id)} (saved to profile)`,
         );
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -45,14 +45,14 @@ export function registerPrincipalCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
-        const { client, profile } = getClient();
+        const { client, profile } = getCoordinatorClient();
         const id = (opts.id as string | undefined) ?? requirePrincipalId(profile);
         const p = await client.getPrincipal(id);
         printOutput(outputOk(p), Boolean(opts.json), (d) =>
           `Principal: ${String((d as { id: string }).id)}\nStatus: ${String((d as { status?: string }).status ?? "unknown")}`,
         );
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -67,7 +67,7 @@ export function registerPrincipalCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
-        const { client, profile } = getClient();
+        const { client, profile } = getCoordinatorClient();
         const id = (opts.id as string | undefined) ?? requirePrincipalId(profile);
         const p = await client.bindPrincipalAddress(id, {
           chain: opts.chain as string,
@@ -77,7 +77,7 @@ export function registerPrincipalCommands(program: Command): void {
         });
         printOutput(outputOk(p), Boolean(opts.json), () => `Address bound successfully`);
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -88,7 +88,7 @@ export function registerPrincipalCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
-        const { client } = getClient();
+        const { client } = getCoordinatorClient();
         const result = await client.listPrincipals({ limit: parseInt(opts.limit as string, 10) });
         printOutput(outputOk(result.items), Boolean(opts.json), (items) => {
           const arr = items as Array<{ id: string; displayName?: string; kind?: string }>;
@@ -96,23 +96,8 @@ export function registerPrincipalCommands(program: Command): void {
           return arr.map((p) => `  ${p.id}  ${p.displayName ?? ""}  (${p.kind ?? ""})`).join("\n");
         });
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 }
 
-function handleError(e: unknown, json?: boolean): void {
-  if (e instanceof ClientError) {
-    printOutput(outputErr(e.code, e.message, e.hint), Boolean(json));
-  } else {
-    printOutput(outputErr("COORDINATOR_API_ERROR", String(e)), Boolean(json));
-  }
-  process.exitCode = 1;
-}
-
-function getClient() {
-  const { config, profile } = loadActiveProfile();
-  const token = requireApiToken(profile);
-  const client = new CoordinatorClient({ baseUrl: profile.coordinatorUrl, token });
-  return { client, config, profile };
-}

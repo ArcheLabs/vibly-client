@@ -1,13 +1,13 @@
 import { Command } from "commander";
-import { loadConfig, saveConfig, initConfig, setConfigKey } from "../../config/config.js";
+import { loadConfig, saveConfig, initConfig, setConfigKey } from "../../../config/config.js";
 import {
   listProfiles,
   createProfile,
   setDefaultProfile,
   getActiveProfileName,
-} from "../../config/profiles.js";
-import { outputOk, outputErr, printOutput } from "../../domain/apiTypes.js";
-import { ClientError } from "../../domain/errors.js";
+} from "../../../config/profiles.js";
+import { outputOk, outputErr, printOutput } from "../../../domain/apiTypes.js";
+import { ClientError } from "../../../domain/errors.js";
 
 export function registerConfigCommands(program: Command): void {
   const config = program
@@ -49,7 +49,7 @@ export function registerConfigCommands(program: Command): void {
       try {
         const cfg = loadConfig();
         const profileName = opts.profile ?? getActiveProfileName(cfg);
-        const fullKey = `profiles.${profileName}.${key}`;
+        const fullKey = `profiles.${ profileName }.${ key }`;
         setConfigKey(cfg, fullKey, value);
         saveConfig(cfg);
         printOutput(outputOk({ key: fullKey, value }), !!opts.json);
@@ -95,7 +95,7 @@ export function registerConfigCommands(program: Command): void {
         const active = getActiveProfileName(cfg);
         const p = cfg.profiles[active];
         if (!p) {
-          printOutput(outputErr("PROFILE_NOT_FOUND", `Profile "${active}" not found`), !!opts.json);
+          printOutput(outputErr("PROFILE_NOT_FOUND", `Profile "${ active }" not found`), !!opts.json);
           process.exitCode = 1;
           return;
         }
@@ -114,7 +114,7 @@ export function registerConfigCommands(program: Command): void {
       try {
         const cfg = loadConfig();
         const p = createProfile(cfg, name, opts.coordinator);
-        printOutput(outputOk({ message: `Profile "${name}" created`, profile: p }), !!opts.json);
+        printOutput(outputOk({ message: `Profile "${ name }" created`, profile: p }), !!opts.json);
       } catch (e) {
         handleError(e, !!opts.json);
       }
@@ -128,7 +128,7 @@ export function registerConfigCommands(program: Command): void {
       try {
         const cfg = loadConfig();
         setDefaultProfile(cfg, name);
-        printOutput(outputOk({ message: `Active profile set to "${name}"` }), !!opts.json);
+        printOutput(outputOk({ message: `Active profile set to "${ name }"` }), !!opts.json);
       } catch (e) {
         handleError(e, !!opts.json);
       }

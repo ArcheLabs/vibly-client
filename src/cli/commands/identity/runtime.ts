@@ -1,13 +1,13 @@
 import type { Command } from "commander";
 import { randomUUID } from "node:crypto";
-import { loadActiveProfile } from "../../config/profiles.js";
-import { openDatabase } from "../../local/database.js";
-import { runMigrations } from "../../local/migrations.js";
-import { LocalRuntimeStore } from "../../local/stores/localRuntimeStore.js";
-import { getDatabasePath } from "../../config/paths.js";
-import { outputOk, outputErr, printOutput } from "../../domain/apiTypes.js";
-import { ClientError } from "../../domain/errors.js";
-import type { LocalRuntimeConfig } from "../../domain/clientTypes.js";
+import { loadActiveProfile } from "../../../config/profiles.js";
+import { openDatabase } from "../../../local/database.js";
+import { runMigrations } from "../../../local/migrations.js";
+import { LocalRuntimeStore } from "../../../local/stores/localRuntimeStore.js";
+import { getDatabasePath } from "../../../config/paths.js";
+import { outputOk, outputErr, printOutput } from "../../../domain/apiTypes.js";
+import { ClientError } from "../../../domain/errors.js";
+import type { LocalRuntimeConfig } from "../../../domain/clientTypes.js";
 
 function getStore(): LocalRuntimeStore {
   const db = openDatabase(getDatabasePath());
@@ -87,7 +87,7 @@ export function registerRuntimeCommands(program: Command): void {
         const store = getStore();
         const r = store.getByName(nameOrId) ?? store.getById(nameOrId);
         if (!r) {
-          printOutput(outputErr("RUNTIME_NOT_FOUND", `Runtime '${nameOrId}' not found`), Boolean(opts.json));
+          printOutput(outputErr("RUNTIME_NOT_FOUND", `Runtime '${ nameOrId }' not found`), Boolean(opts.json));
           process.exitCode = 1;
           return;
         }
@@ -118,12 +118,12 @@ export function registerRuntimeCommands(program: Command): void {
         const store = getStore();
         const r = store.getByName(nameOrId) ?? store.getById(nameOrId);
         if (!r) {
-          printOutput(outputErr("RUNTIME_NOT_FOUND", `Runtime '${nameOrId}' not found`), Boolean(opts.json));
+          printOutput(outputErr("RUNTIME_NOT_FOUND", `Runtime '${ nameOrId }' not found`), Boolean(opts.json));
           process.exitCode = 1;
           return;
         }
         store.delete(r.id);
-        printOutput(outputOk({ deleted: r.id }), Boolean(opts.json), () => `Deleted runtime '${nameOrId}'`);
+        printOutput(outputOk({ deleted: r.id }), Boolean(opts.json), () => `Deleted runtime '${ nameOrId }'`);
       } catch (e) {
         handleError(e, opts.json as boolean | undefined);
       }

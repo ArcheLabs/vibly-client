@@ -17,10 +17,10 @@
  */
 
 import { Command } from "commander";
-import { CoordinatorClient } from "../../coordinator/client.js";
-import { loadActiveProfile, requireApiToken } from "../../config/profiles.js";
-import { resolveChainSignerOptions } from "../../chain/signer.js";
-import { getEnv } from "../../config/env.js";
+import { resolveChainSignerOptions } from "../../../chain/signer.js";
+import { getEnv } from "../../../config/env.js";
+import { getCoordinatorClient } from "../shared/client.js";
+import { asRecord } from "../shared/format.js";
 
 // Lazy-import the adapter so it is only resolved when a governance sub-command
 // is actually invoked (avoids pulling in polkadot-api for all CLI paths).
@@ -268,7 +268,7 @@ export function registerGovernanceCommands(program: Command): void {
             for (const item of result.items) {
               const idx = item.metadata?.["referendumIndex"] ?? item.ref.externalId;
               process.stdout.write(
-                `#${idx}  [${item.status}]  ${item.title ?? "(no title)"}\n`,
+                `#${ idx }  [${item.status}]  ${item.title ?? "(no title)"}\n`,
               );
             }
             if (result.nextCursor) {
@@ -303,13 +303,13 @@ export function registerGovernanceCommands(program: Command): void {
           },
         });
         if (!result) {
-          process.stderr.write(`Referendum #${referendumIndex} not found.\n`);
+          process.stderr.write(`Referendum #${ referendumIndex } not found.\n`);
           process.exit(1);
         }
         if (program.opts().json) {
           process.stdout.write(JSON.stringify(result, jsonReplacer, 2) + "\n");
         } else {
-          process.stdout.write(`Referendum #${referendumIndex}\n`);
+          process.stdout.write(`Referendum #${ referendumIndex }\n`);
           process.stdout.write(`  Status : ${result.status}\n`);
           process.stdout.write(`  Title  : ${result.title ?? "(none)"}\n`);
           if (result.metadata) {
@@ -359,7 +359,7 @@ export function registerGovernanceCommands(program: Command): void {
           metadata: { conviction: opts.conviction },
         });
         process.stderr.write(
-          `Casting vote on referendum #${referendumIndex} (stance=${opts.stance}, conviction=${opts.conviction})…\n`,
+          `Casting vote on referendum #${ referendumIndex } (stance=${opts.stance}, conviction=${opts.conviction})…\n`,
         );
         const receipt = await adapter.castVote({ subject, voter: options.signerUri, payload });
         if (program.opts().json) {
@@ -392,7 +392,7 @@ export function registerGovernanceCommands(program: Command): void {
           chainId: opts.chainId,
         });
         const chain = { namespace: "substrate" as const, chainId: options.chainId };
-        process.stderr.write(`Delegating to ${delegatee} on track ${opts.track}…\n`);
+        process.stderr.write(`Delegating to ${ delegatee } on track ${opts.track}…\n`);
         const receipt = await adapter.delegate({
           chain,
           delegator: options.signerUri,
@@ -461,7 +461,7 @@ export function registerGovernanceCommands(program: Command): void {
         const subject = referendumIndex
           ? { chain, backend: "substrate-opengov" as const, externalId: referendumIndex }
           : undefined;
-        process.stderr.write(`Unlocking balance${referendumIndex ? ` (referendum #${referendumIndex})` : ""}…\n`);
+        process.stderr.write(`Unlocking balance${referendumIndex ? ` (referendum #${ referendumIndex })` : ""}…\n`);
         const receipt = await adapter.unlockOrReclaim!({ chain, actor: options.signerUri, subject });
         if (program.opts().json) {
           process.stdout.write(JSON.stringify(receipt, jsonReplacer, 2) + "\n");
@@ -483,15 +483,6 @@ function jsonReplacer(_key: string, value: unknown): unknown {
   return value;
 }
 
-function getCoordinatorClient() {
-  const { profile } = loadActiveProfile();
-  const token = requireApiToken(profile);
-  return {
-    client: new CoordinatorClient({ baseUrl: profile.coordinatorUrl, token }),
-    profile,
-  };
-}
-
 function printMergedItems(items: unknown[]): void {
   if (items.length === 0) {
     process.stdout.write("No merged governance views found.\n");
@@ -506,7 +497,7 @@ function printMergedItems(items: unknown[]): void {
     const title = String(asRecord(record["intent"])["title"] ?? subject["title"] ?? "(untitled)");
     const checkpoint = asRecord(freshness["checkpoint"]);
     process.stdout.write(
-      `${String(record["id"] ?? "unknown")}  [${String(status["merged"] ?? "unknown")}]  ${String(subject["backend"] ?? "-")}  ${title}`,
+      `${String(record["id"] ?? "unknown")}  [${String(status["merged"] ?? "unknown")}]  ${String(subject["backend"] ?? "-")}  ${ title }`,
     );
     if (freshness["stale"]) {
       process.stdout.write(`  stale${freshness["reason"] ? `:${String(freshness["reason"])}` : ""}`);
@@ -572,6 +563,3 @@ function printBackendItems(items: unknown[]): void {
   }
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? value as Record<string, unknown> : {};
-}

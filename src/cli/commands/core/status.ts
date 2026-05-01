@@ -1,13 +1,13 @@
 import { Command } from "commander";
-import { loadConfig } from "../../config/config.js";
+import { loadConfig } from "../../../config/config.js";
 import {
   getActiveProfile,
   getActiveProfileName,
   requireApiToken,
-} from "../../config/profiles.js";
-import { outputOk, outputErr, printOutput } from "../../domain/apiTypes.js";
-import { ClientError } from "../../domain/errors.js";
-import { CoordinatorClient } from "../../coordinator/client.js";
+} from "../../../config/profiles.js";
+import { outputOk, outputErr, printOutput } from "../../../domain/apiTypes.js";
+import { ClientError } from "../../../domain/errors.js";
+import { CoordinatorClient } from "../../../coordinator/client.js";
 
 export function registerStatusCommands(program: Command): void {
   program

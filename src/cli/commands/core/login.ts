@@ -1,8 +1,8 @@
 import type { Command } from "commander";
-import { CoordinatorClient } from "../../coordinator/client.js";
-import { loadConfig } from "../../config/config.js";
-import { outputOk, outputErr, printOutput } from "../../domain/apiTypes.js";
-import { ClientError } from "../../domain/errors.js";
+import { CoordinatorClient } from "../../../coordinator/client.js";
+import { loadConfig } from "../../../config/config.js";
+import { outputOk, outputErr, printOutput } from "../../../domain/apiTypes.js";
+import { ClientError } from "../../../domain/errors.js";
 
 export function registerLoginCommands(program: Command): void {
   program
@@ -20,7 +20,7 @@ export function registerLoginCommands(program: Command): void {
         });
         const health = await client.health();
 
-        const { loadConfig: lc, saveConfig: sc } = await import("../../config/config.js");
+        const { loadConfig: lc, saveConfig: sc } = await import("../../../config/config.js");
         const config = lc();
         const profileName: string = opts.profile as string;
 
@@ -58,7 +58,7 @@ export function registerLoginCommands(program: Command): void {
       const config = loadConfig();
       const profileName = profileArg ?? config.defaultProfile ?? "default";
       if (!config.profiles[profileName]) {
-        printOutput(outputErr("PROFILE_NOT_FOUND", `Profile '${profileName}' not found`), Boolean(opts.json));
+        printOutput(outputErr("PROFILE_NOT_FOUND", `Profile '${ profileName }' not found`), Boolean(opts.json));
         process.exitCode = 1;
         return;
       }
@@ -67,7 +67,7 @@ export function registerLoginCommands(program: Command): void {
         const remaining = Object.keys(config.profiles);
         config.defaultProfile = remaining[0] ?? "default";
       }
-      const { saveConfig } = await import("../../config/config.js");
+      const { saveConfig } = await import("../../../config/config.js");
       saveConfig(config);
       printOutput(outputOk({ removed: profileName }), Boolean(opts.json), (raw) => {
         const d = raw as { removed: string };

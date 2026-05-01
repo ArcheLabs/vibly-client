@@ -8,9 +8,10 @@ This file lists invariants every Cursor agent (and human contributor) must obey 
 
 ## Invariants
 
-1. **New paths MUST come from the contract.** Use `path("/...")` from `src/coordinator/contractPaths.ts` to type-constrain the literal against `@vibly/coordinator-http-contract`'s `paths`. Adding a new entry to `src/coordinator/routes.ts` is allowed only if the corresponding coordinator route does not yet exist; in that case, file a follow-up to add the route + schema in coordinator and migrate the constant to `path("/...")`.
-2. **Do not duplicate response shapes from the contract.** When migrating a method, prefer importing `paths['/...']['get']['responses']['200']['content']['application/json']` from `@vibly/coordinator-http-contract/types` over hand-written DTOs in `src/coordinator/types.ts`. The CLI may keep its own internal models for state that is purely client-side.
-3. **CLI transport policy stays in `CoordinatorClient.request()`.** The contract package does not know about retries, timeouts, or idempotency. Migration to the contract client (when it happens for read-only paths) must wire those concerns through openapi-fetch's custom `fetch` option, not delete them.
+1. **New paths MUST come from the contract.** `src/coordinator/client.ts` is 100% contract-backed and must call `this.contract.METHOD("/typed/path", { params, body })`. Keep path literals constrained by `path("/...")` in `src/coordinator/contractPaths.ts` when a literal must be assembled (e.g. SSE URL helpers).
+2. **Do not duplicate response shapes from the contract.** Prefer importing projections from `@vibly/coordinator-http-contract/types` (`paths['/...']['get']['responses']['200']['content']['application/json']`) over growing hand-written DTOs in `src/coordinator/types.ts`.
+3. **CLI transport policy lives in `src/coordinator/contractClient.ts`.** Bearer auth, GET retry/backoff, and `Idempotency-Key` behavior are wired through openapi-fetch's custom `fetch` + per-call headers. Do not reintroduce a parallel `fetch` stack in `CoordinatorClient`.
+4. **Handwritten coordinator paths are lint-blocked.** `scripts/check-handwritten-paths.mjs` scans `src/` and only allows transport-level path assembly in `src/coordinator/sse.ts` and `src/coordinator/contractClient.ts`.
 
 ## When in doubt
 

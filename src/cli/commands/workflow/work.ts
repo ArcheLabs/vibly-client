@@ -1,19 +1,20 @@
 import type { Command } from "commander";
-import { CoordinatorClient } from "../../coordinator/client.js";
-import { loadActiveProfile, requireApiToken, requireAgentId } from "../../config/profiles.js";
-import { openDatabase } from "../../local/database.js";
-import { runMigrations } from "../../local/migrations.js";
-import { LocalEntityStore } from "../../local/stores/localEntityStore.js";
-import { LocalWorkStore } from "../../local/stores/localWorkStore.js";
-import { getDatabasePath } from "../../config/paths.js";
-import { getRuntimeByName } from "../../runtime/runtimeRegistry.js";
-import { RuntimeHost } from "../../runtime/runtimeHost.js";
-import { outputOk, outputErr, printOutput } from "../../domain/apiTypes.js";
-import { ClientError, ErrorCode } from "../../domain/errors.js";
+import { requireAgentId } from "../../../config/profiles.js";
+import { openDatabase } from "../../../local/database.js";
+import { runMigrations } from "../../../local/migrations.js";
+import { LocalEntityStore } from "../../../local/stores/localEntityStore.js";
+import { LocalWorkStore } from "../../../local/stores/localWorkStore.js";
+import { getDatabasePath } from "../../../config/paths.js";
+import { getRuntimeByName } from "../../../runtime/runtimeRegistry.js";
+import { RuntimeHost } from "../../../runtime/runtimeHost.js";
+import { outputOk, printOutput } from "../../../domain/apiTypes.js";
+import { ClientError, ErrorCode } from "../../../domain/errors.js";
 import { randomUUID } from "node:crypto";
-import type { WorkOrder } from "../../coordinator/types.js";
-import type { RuntimeExecutionInput } from "../../domain/clientTypes.js";
+import type { WorkOrder } from "../../../coordinator/types.js";
+import type { RuntimeExecutionInput } from "../../../domain/clientTypes.js";
 
+import { getCoordinatorClient } from "../shared/client.js";
+import { handleCliError } from "../shared/errors.js";
 export function registerWorkCommands(program: Command): void {
   const work = program.command("work").description("Manage work orders");
 
@@ -25,7 +26,7 @@ export function registerWorkCommands(program: Command): void {
     .action(async (opts) => {
       try {
         if (opts.live) {
-          const { client, profile } = getClient();
+          const { client, profile } = getCoordinatorClient();
           const result = await client.listOpenWorkOrders({ projectId: profile.projectId, limit: 50 });
           printWorkOrders(result.items, Boolean(opts.json));
         } else {
@@ -36,7 +37,7 @@ export function registerWorkCommands(program: Command): void {
           printWorkOrders(items, Boolean(opts.json));
         }
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -47,11 +48,11 @@ export function registerWorkCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (id: string, opts) => {
       try {
-        const { client } = getClient();
+        const { client } = getCoordinatorClient();
         const wo = await client.getWorkOrder(id);
         printOutput(outputOk(wo), Boolean(opts.json), (d) => JSON.stringify(d, null, 2));
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -63,15 +64,15 @@ export function registerWorkCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (id: string, opts) => {
       try {
-        const { client, profile } = getClient();
+        const { client, profile } = getCoordinatorClient();
         const agentId = requireAgentId(profile);
         const claim = await client.claimWorkOrder(id, {
           actorId: agentId,
           leaseMs: opts.lease ? parseInt(opts.lease as string, 10) : undefined,
         });
-        printOutput(outputOk(claim), Boolean(opts.json), () => `Claimed work order ${id}`);
+        printOutput(outputOk(claim), Boolean(opts.json), () => `Claimed work order ${ id }`);
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -89,7 +90,7 @@ export function registerWorkCommands(program: Command): void {
           return `Run completed: ${r.runId}\nSummary: ${r.summary}`;
         });
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -102,16 +103,16 @@ export function registerWorkCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (id: string, opts) => {
       try {
-        const { client, profile } = getClient();
+        const { client, profile } = getCoordinatorClient();
         const agentId = requireAgentId(profile);
         const sub = await client.submitWorkOrder(id, {
           submittedBy: agentId,
           contextBundleId: opts.contextBundleId as string,
           summary: opts.summary as string,
         });
-        printOutput(outputOk(sub), Boolean(opts.json), () => `Submitted work order ${id}`);
+        printOutput(outputOk(sub), Boolean(opts.json), () => `Submitted work order ${ id }`);
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -123,11 +124,11 @@ export function registerWorkCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (id: string, opts) => {
       try {
-        const { client, profile } = getClient();
+        const { client, profile } = getCoordinatorClient();
         const agentId = requireAgentId(profile);
 
         // 1. Claim
-        console.error(`Claiming work order ${id}...`);
+        console.error(`Claiming work order ${ id }...`);
         await client.claimWorkOrder(id, { actorId: agentId });
 
         // 2. Create + accept context bundle
@@ -191,18 +192,18 @@ export function registerWorkCommands(program: Command): void {
           return `Work order submitted. Submission ID: ${r.submissionId ?? "unknown"}\nSummary: ${r.summary}`;
         });
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 }
 
 async function runWorkOrder(workOrderId: string, runtimeName: string) {
-  const { client, profile } = getClient();
+  const { client, profile } = getCoordinatorClient();
   const agentId = requireAgentId(profile);
 
   const runtimeConfig = getRuntimeByName(runtimeName);
   if (!runtimeConfig) {
-    throw new ClientError(ErrorCode.RUNTIME_NOT_FOUND, `Runtime '${runtimeName}' not found`);
+    throw new ClientError(ErrorCode.RUNTIME_NOT_FOUND, `Runtime '${ runtimeName }' not found`);
   }
 
   const workOrder = await client.getWorkOrder(workOrderId);
@@ -243,20 +244,4 @@ function printWorkOrders(items: WorkOrder[], json: boolean): void {
     if (arr.length === 0) return "No open work orders. Run `vibly sync work` to refresh.";
     return arr.map((w) => `  ${w.id}  ${(w as { title?: string }).title ?? ""}  (${(w as { status?: string }).status ?? ""})`).join("\n");
   });
-}
-
-function getClient() {
-  const { config, profile } = loadActiveProfile();
-  const token = requireApiToken(profile);
-  const client = new CoordinatorClient({ baseUrl: profile.coordinatorUrl, token });
-  return { client, config, profile };
-}
-
-function handleError(e: unknown, json?: boolean): void {
-  if (e instanceof ClientError) {
-    printOutput(outputErr(e.code, e.message, e.hint), Boolean(json));
-  } else {
-    printOutput(outputErr("COORDINATOR_API_ERROR", String(e)), Boolean(json));
-  }
-  process.exitCode = 1;
 }

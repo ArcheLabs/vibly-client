@@ -1,7 +1,7 @@
 import type { Command } from "commander";
-import { loadConfig } from "../../config/config.js";
-import { loadActiveProfile } from "../../config/profiles.js";
-import { outputOk, printOutput } from "../../domain/apiTypes.js";
+import { loadConfig } from "../../../config/config.js";
+import { loadActiveProfile } from "../../../config/profiles.js";
+import { outputOk, printOutput } from "../../../domain/apiTypes.js";
 
 export function registerDaemonCommands(program: Command): void {
   const daemon = program.command("daemon").description("Run the automation daemon");
@@ -12,7 +12,7 @@ export function registerDaemonCommands(program: Command): void {
     .option("--interval <ms>", "Poll interval in milliseconds", "30000")
     .option("--verbose", "Enable debug logging")
     .action(async (opts) => {
-      const { startDaemon } = await import("../../daemon/daemon.js");
+      const { startDaemon } = await import("../../../daemon/daemon.js");
       await startDaemon({
         intervalMs: parseInt(opts.interval as string, 10),
         verbose: Boolean(opts.verbose),
@@ -24,7 +24,7 @@ export function registerDaemonCommands(program: Command): void {
     .description("Run a single daemon iteration and exit")
     .option("--verbose", "Enable debug logging")
     .action(async (opts) => {
-      const { startDaemon } = await import("../../daemon/daemon.js");
+      const { startDaemon } = await import("../../../daemon/daemon.js");
       await startDaemon({ once: true, verbose: Boolean(opts.verbose) });
     });
 

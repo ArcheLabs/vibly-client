@@ -1,36 +1,75 @@
 /**
- * Adapter that gives the CLI a typed `@vibly/coordinator-http-contract`
- * client while keeping CLI-specific transport policy (Bearer auth,
- * Idempotency-Key, retries with exponential backoff for GETs, request
- * timeout). The contract client is plugged with a custom `fetch` that
- * forwards through the CLI's existing retry-aware request helper, so all
- * methods in `CoordinatorClient` can incrementally migrate without
- * losing those CLI-only behaviours.
+ * Adapter that builds a `@vibly/coordinator-http-contract` client carrying
+ * CLI-only transport policy:
  *
- * This is intentionally a thin wrapper - it does not expose contract
- * methods directly; instead, `CoordinatorClient` calls them and uses the
- * contract types to enforce that the paths exist in the OpenAPI spec.
+ * - Bearer token injected via static headers (per-call headers can override
+ *   for `Idempotency-Key`).
+ * - GET requests are retried with exponential backoff on network failure or
+ *   HTTP 5xx; non-GET requests never retry.
+ * - 4xx responses are surfaced as-is so the caller (CoordinatorClient method)
+ *   can map them to `CoordinatorApiError` via the `runContract` helper.
+ *
+ * Path strings, JSON envelope handling, and request/response types come from
+ * the contract package; only the fetch layer lives here.
  */
 import { createCoordinatorClient } from "@vibly/coordinator-http-contract/client";
-import type {
-  CoordinatorClient as ContractClient,
-} from "@vibly/coordinator-http-contract/client";
+import type { CoordinatorClient as ContractClient } from "@vibly/coordinator-http-contract/client";
 
 export type ContractCoordinatorClient = ContractClient;
 
-export interface CliFetchOptions {
+export interface CliContractOptions {
   baseUrl: string;
   token: string;
-  /** Custom fetch with retry/idempotency wired in (provided by the CoordinatorClient). */
-  fetch: typeof fetch;
+  /** Maximum retries for GET requests (default: 2). */
+  maxRetries?: number;
+  /** Base delay in ms for exponential backoff (default: 500). */
+  retryBaseMs?: number;
 }
 
-export function createCliContractClient(opts: CliFetchOptions): ContractCoordinatorClient {
+export function createCliContractClient(opts: CliContractOptions): ContractCoordinatorClient {
+  const baseUrl = opts.baseUrl.replace(/\/$/, "");
+  const maxRetries = opts.maxRetries ?? 2;
+  const retryBaseMs = opts.retryBaseMs ?? 500;
+
+  const cliFetch: typeof fetch = async (input, init) => {
+    const method = resolveMethod(input, init);
+    const isGet = method === "GET";
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= (isGet ? maxRetries : 0); attempt++) {
+      if (attempt > 0) await sleep(retryBaseMs * 2 ** (attempt - 1));
+      try {
+        const res = await fetch(input as RequestInfo, init);
+        if (!isGet) return res;
+        if (res.status >= 500) {
+          lastError = new Error(`HTTP ${res.status}`);
+          continue;
+        }
+        return res;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  };
+
   return createCoordinatorClient({
-    baseUrl: opts.baseUrl,
-    fetch: opts.fetch,
+    baseUrl,
+    fetch: cliFetch,
     headers: {
       Authorization: `Bearer ${opts.token}`,
     },
   });
+}
+
+function resolveMethod(input: RequestInfo | URL, init?: RequestInit): string {
+  if (init?.method) return init.method.toUpperCase();
+  if (typeof input === "object" && input !== null && "method" in (input as Request)) {
+    return (input as Request).method.toUpperCase();
+  }
+  return "GET";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -1,9 +1,9 @@
 import type { Command } from "commander";
-import { CoordinatorClient } from "../../coordinator/client.js";
-import { loadActiveProfile, requireApiToken, requirePrincipalId, requireAgentId } from "../../config/profiles.js";
-import { saveConfig } from "../../config/config.js";
-import { outputOk, outputErr, printOutput } from "../../domain/apiTypes.js";
-import { ClientError } from "../../domain/errors.js";
+import { requirePrincipalId, requireAgentId } from "../../../config/profiles.js";
+import { saveConfig } from "../../../config/config.js";
+import { outputOk, printOutput } from "../../../domain/apiTypes.js";
+import { getCoordinatorClient } from "../shared/client.js";
+import { handleCliError } from "../shared/errors.js";
 
 export function registerAgentCommands(program: Command): void {
   const agent = program.command("agent").description("Manage agents");
@@ -17,7 +17,7 @@ export function registerAgentCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
-        const { client, config, profile } = getClient();
+        const { client, config, profile } = getCoordinatorClient();
         const principalId = requirePrincipalId(profile);
 
         const a = await client.registerAgent({
@@ -37,7 +37,7 @@ export function registerAgentCommands(program: Command): void {
           `Registered agent: ${String((d as { id: string }).id)} (saved to profile)`,
         );
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -48,14 +48,14 @@ export function registerAgentCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
-        const { client, profile } = getClient();
+        const { client, profile } = getCoordinatorClient();
         const id = (opts.id as string | undefined) ?? requireAgentId(profile);
         const a = await client.getAgent(id);
         printOutput(outputOk(a), Boolean(opts.json), (d) =>
           `Agent: ${String((d as { id: string }).id)}\nStatus: ${String((d as { status?: string }).status ?? "unknown")}`,
         );
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -67,15 +67,15 @@ export function registerAgentCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (status: string, opts) => {
       try {
-        const { client, profile } = getClient();
+        const { client, profile } = getCoordinatorClient();
         const agentId = requireAgentId(profile);
         const a = await client.changeAgentStatus(agentId, {
           nextStatus: status,
           reason: opts.reason as string | undefined,
         });
-        printOutput(outputOk(a), Boolean(opts.json), () => `Agent status updated to '${status}'`);
+        printOutput(outputOk(a), Boolean(opts.json), () => `Agent status updated to '${ status }'`);
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -87,7 +87,7 @@ export function registerAgentCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
-        const { client, config, profile } = getClient();
+        const { client, config, profile } = getCoordinatorClient();
         const agentId = requireAgentId(profile);
         const binding = await client.createRuntimeBinding(agentId, {
           runtimeKind: opts.kind as string,
@@ -104,23 +104,8 @@ export function registerAgentCommands(program: Command): void {
           `Runtime binding created: ${String((d as { id: string }).id)} (saved as default)`,
         );
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 }
 
-function handleError(e: unknown, json?: boolean): void {
-  if (e instanceof ClientError) {
-    printOutput(outputErr(e.code, e.message, e.hint), Boolean(json));
-  } else {
-    printOutput(outputErr("COORDINATOR_API_ERROR", String(e)), Boolean(json));
-  }
-  process.exitCode = 1;
-}
-
-function getClient() {
-  const { config, profile } = loadActiveProfile();
-  const token = requireApiToken(profile);
-  const client = new CoordinatorClient({ baseUrl: profile.coordinatorUrl, token });
-  return { client, config, profile };
-}

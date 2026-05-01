@@ -1,15 +1,15 @@
 import type { Command } from "commander";
-import { CoordinatorClient } from "../../coordinator/client.js";
-import { loadActiveProfile, requireApiToken, requireProjectId } from "../../config/profiles.js";
-import { openDatabase } from "../../local/database.js";
-import { runMigrations } from "../../local/migrations.js";
-import { LocalEntityStore } from "../../local/stores/localEntityStore.js";
-import { LocalEventStore } from "../../local/stores/localEventStore.js";
-import { LocalSyncStateStore } from "../../local/stores/localSyncStateStore.js";
-import { getDatabasePath } from "../../config/paths.js";
-import { outputOk, outputErr, printOutput } from "../../domain/apiTypes.js";
-import { ClientError } from "../../domain/errors.js";
+import { requireProjectId } from "../../../config/profiles.js";
+import { openDatabase } from "../../../local/database.js";
+import { runMigrations } from "../../../local/migrations.js";
+import { LocalEntityStore } from "../../../local/stores/localEntityStore.js";
+import { LocalEventStore } from "../../../local/stores/localEventStore.js";
+import { LocalSyncStateStore } from "../../../local/stores/localSyncStateStore.js";
+import { getDatabasePath } from "../../../config/paths.js";
+import { outputOk, printOutput } from "../../../domain/apiTypes.js";
 
+import { getCoordinatorClient } from "../shared/client.js";
+import { handleCliError } from "../shared/errors.js";
 export function registerSyncCommands(program: Command): void {
   const sync = program.command("sync").description("Sync data from coordinator");
 
@@ -20,7 +20,7 @@ export function registerSyncCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
-        const { client } = getClient();
+        const { client } = getCoordinatorClient();
         const db = openDatabase(getDatabasePath());
         runMigrations(db);
         const eventStore = new LocalEventStore(db);
@@ -41,7 +41,7 @@ export function registerSyncCommands(program: Command): void {
           `Synced ${String((d as { synced: number }).synced)} events`,
         );
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -51,7 +51,7 @@ export function registerSyncCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
-        const { client, profile } = getClient();
+        const { client, profile } = getCoordinatorClient();
         const projectId = requireProjectId(profile);
         const db = openDatabase(getDatabasePath());
         runMigrations(db);
@@ -69,11 +69,11 @@ export function registerSyncCommands(program: Command): void {
         if (objectives.status === "fulfilled") entityStore.upsertMany("objective", objectives.value.items as unknown as Array<{ id: string } & Record<string, unknown>>);
         if (boundary.status === "fulfilled" && boundary.value) entityStore.upsert("boundary", projectId, boundary.value);
         if (state.status === "fulfilled" && state.value) entityStore.upsert("state", projectId, state.value);
-        syncState.set(`project:${projectId}`);
+        syncState.set(`project:${ projectId }`);
 
-        printOutput(outputOk({ projectId }), Boolean(opts.json), () => `Project state synced for ${projectId}`);
+        printOutput(outputOk({ projectId }), Boolean(opts.json), () => `Project state synced for ${ projectId }`);
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -84,7 +84,7 @@ export function registerSyncCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
-        const { client, profile } = getClient();
+        const { client, profile } = getCoordinatorClient();
         const db = openDatabase(getDatabasePath());
         runMigrations(db);
         const entityStore = new LocalEntityStore(db);
@@ -100,7 +100,7 @@ export function registerSyncCommands(program: Command): void {
           `Synced ${String((d as { synced: number }).synced)} open work orders`,
         );
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
 
@@ -110,7 +110,7 @@ export function registerSyncCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
-        const { client, profile } = getClient();
+        const { client, profile } = getCoordinatorClient();
         const projectId = profile.projectId;
         const db = openDatabase(getDatabasePath());
         runMigrations(db);
@@ -144,31 +144,15 @@ export function registerSyncCommands(program: Command): void {
           if (objectives.status === "fulfilled") { entityStore.upsertMany("objective", objectives.value.items as unknown as Array<{ id: string } & Record<string, unknown>>); results["objectives"] = objectives.value.items.length; }
           if (boundary.status === "fulfilled" && boundary.value) entityStore.upsert("boundary", projectId, boundary.value);
           if (latestState.status === "fulfilled" && latestState.value) entityStore.upsert("state", projectId, latestState.value);
-          syncState.set(`project:${projectId}`);
+          syncState.set(`project:${ projectId }`);
         }
 
         printOutput(outputOk(results), Boolean(opts.json), (d) => {
           const r = d as Record<string, number>;
-          return Object.entries(r).map(([k, v]) => `  ${k}: ${v}`).join("\n");
+          return Object.entries(r).map(([k, v]) => `  ${ k }: ${ v }`).join("\n");
         });
       } catch (e) {
-        handleError(e, opts.json as boolean | undefined);
+        handleCliError(e, opts.json as boolean | undefined);
       }
     });
-}
-
-function getClient() {
-  const { config, profile } = loadActiveProfile();
-  const token = requireApiToken(profile);
-  const client = new CoordinatorClient({ baseUrl: profile.coordinatorUrl, token });
-  return { client, config, profile };
-}
-
-function handleError(e: unknown, json?: boolean): void {
-  if (e instanceof ClientError) {
-    printOutput(outputErr(e.code, e.message, e.hint), Boolean(json));
-  } else {
-    printOutput(outputErr("COORDINATOR_API_ERROR", String(e)), Boolean(json));
-  }
-  process.exitCode = 1;
 }

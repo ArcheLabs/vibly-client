@@ -82,8 +82,8 @@ vibly daemon start
 | `vibly knowledge show/list` | 查看知识版本 |
 | `vibly events list/stream` | 查看和流式订阅事件 |
 | `vibly trace list/show/verify/replay` | 追踪管理 |
-| `vibly phase-f smoke/runs` | 运行或查看 Phase F 测试 Agent 协作 smoke |
-| `vibly phase-h smoke/runs/status` | 运行或查看 Phase H 激励/风险 smoke |
+| `vibly scenarios agent-collaboration run/runs` | 运行或查看 Agent 协作 dev 场景（旧别名 `phase-f smoke/runs`）|
+| `vibly scenarios incentive-risk run/runs/status` | 运行或查看激励/风险 dev 场景（旧别名 `phase-h smoke/runs/status`）|
 
 ### 同步 & Daemon
 
@@ -124,30 +124,34 @@ vibly governance vote-opengov <subjectId> --voter <account> --stance aye --weigh
 vibly governance merged --backend substrate-opengov
 ```
 
-### Phase F 测试 Agent 协作闭环
+### Agent 协作 dev 场景
 
 Coordinator 需启用 `ENABLE_DEV_ROUTES=true`。Client 验证：
 
 ```bash
-vibly phase-f smoke
-vibly phase-f runs
+vibly scenarios agent-collaboration run
+vibly scenarios agent-collaboration runs
 vibly trace verify trace_phase_f_smoke
 vibly trace replay trace_phase_f_smoke
 ```
 
-`phase-f smoke` 会触发 coordinator 的 dev-only scripted loop：Observer 观察并提出 high-risk action，Delegate/Guardian 协商，Worker 执行，Reviewer 评审，随后生成可验证和重放的 trace。
+`scenarios agent-collaboration run` 会触发 coordinator 的 dev-only scripted loop：Observer 观察并提出 high-risk action，Delegate/Guardian 协商，Worker 执行，Reviewer 评审，随后生成可验证和重放的 trace。
 
-### Phase H 最小激励/风险闭环
+> 旧命令 `vibly phase-f smoke|runs` 仍作为 deprecated alias 保留，方便已有脚本兼容；新用法请使用 `scenarios`。
+
+### 激励 / 风险 dev 场景
 
 Coordinator 需启用 `ENABLE_DEV_ROUTES=true`。Client 验证：
 
 ```bash
-vibly phase-h smoke
-vibly phase-h runs
-vibly phase-h status --project-id project_phase-f-collaboration
+vibly scenarios incentive-risk run
+vibly scenarios incentive-risk runs
+vibly scenarios incentive-risk status --project-id project_phase-f-collaboration
 ```
 
-`phase-h smoke` 会在 Phase F accepted work 基础上生成 reward intent、mock ledger funding receipt、claimable reward、reputation evidence、slash request 与 Guardian-visible risk 记录。Phase H 默认使用 mock ledger；真实 Vibly chain settlement 留给后续阶段。
+`scenarios incentive-risk run` 会在 agent-collaboration accepted work 基础上生成 reward intent、mock ledger funding receipt、claimable reward、reputation evidence、slash request 与 Guardian-visible risk 记录。该场景默认使用 mock ledger；真实 Vibly chain settlement 留给后续阶段。
+
+> 旧命令 `vibly phase-h smoke|runs|status` 仍作为 deprecated alias 保留，方便已有脚本兼容；新用法请使用 `scenarios`。
 
 Substrate OpenGov 直链/直 indexer 路径：
 
