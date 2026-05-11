@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { CoordinatorClient } from "../../coordinator/client.js";
 import type { ClientProfile } from "../../domain/clientTypes.js";
 import type { DaemonConfig } from "../../schemas/daemon.js";
@@ -11,7 +12,8 @@ export async function voteHandler(
   if (!daemonConfig.autoVote) return;
   const log = getLogger();
   const agentId = profile.agentId;
-  if (!agentId) return;
+  const principalId = profile.principalId;
+  if (!agentId || !principalId) return;
 
   try {
     const result = await client.listNegotiations({ status: "open", projectId: profile.projectId, limit: 20 });
@@ -32,10 +34,17 @@ export async function voteHandler(
       if (!matchingRule) continue;
 
       log.info({ negotiationId: neg.id, stance: matchingRule.stance }, "daemon: submitting vote");
-      await client.submitNegotiationPosition(neg.id, {
-        actorId: agentId,
-        stance: matchingRule.stance,
-        rationale: "Automatic vote by vibly-client daemon",
+      await client.submitActionIntent({
+        type: "SubmitNegotiationPosition",
+        principalId,
+        projectId: profile.projectId,
+        payload: {
+          negotiationId: neg.id,
+          actorId: agentId,
+          stance: matchingRule.stance,
+          rationale: "Automatic vote by vibly-client daemon",
+        },
+        idempotencyKey: randomUUID(),
       });
     }
   } catch (e) {

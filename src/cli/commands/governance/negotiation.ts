@@ -1,5 +1,6 @@
 import type { Command } from "commander";
-import { requireAgentId } from "../../../config/profiles.js";
+import { randomUUID } from "node:crypto";
+import { requireAgentId, requirePrincipalId } from "../../../config/profiles.js";
 import { outputOk, printOutput } from "../../../domain/apiTypes.js";
 import type { NegotiationInstance } from "../../../coordinator/types.js";
 
@@ -58,14 +59,22 @@ export function registerNegotiationCommands(program: Command): void {
     .action(async (id: string, opts) => {
       try {
         const { client, profile } = getCoordinatorClient();
+        const principalId = requirePrincipalId(profile);
         const agentId = requireAgentId(profile);
-        const n = await client.submitNegotiationPosition(id, {
-          actorId: agentId,
-          stance: opts.stance as string,
-          rationale: opts.rationale as string,
-          score: opts.score ? parseFloat(opts.score as string) : undefined,
+        const receipt = await client.submitActionIntent({
+          type: "SubmitNegotiationPosition",
+          principalId,
+          projectId: profile.projectId,
+          payload: {
+            negotiationId: id,
+            actorId: agentId,
+            stance: opts.stance as string,
+            rationale: opts.rationale as string,
+            score: opts.score ? parseFloat(opts.score as string) : undefined,
+          },
+          idempotencyKey: randomUUID(),
         });
-        printOutput(outputOk(n), Boolean(opts.json), () => `Position submitted on negotiation ${ id }`);
+        printOutput(outputOk(receipt), Boolean(opts.json), () => `Position submitted on negotiation ${ id } (eventId: ${receipt.eventId})`);
       } catch (e) {
         handleCliError(e, opts.json as boolean | undefined);
       }

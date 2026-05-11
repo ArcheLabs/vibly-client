@@ -1,5 +1,6 @@
 import type { Command } from "commander";
-import { requireAgentId } from "../../../config/profiles.js";
+import { randomUUID } from "node:crypto";
+import { requireAgentId, requirePrincipalId } from "../../../config/profiles.js";
 import { outputOk, printOutput } from "../../../domain/apiTypes.js";
 import type { ReviewRecord } from "../../../coordinator/types.js";
 
@@ -38,23 +39,27 @@ export function registerReviewCommands(program: Command): void {
     .requiredOption("--submission-id <id>", "Submission ID to review")
     .requiredOption("--result <result>", "Result: approve|reject|request-changes|abstain")
     .requiredOption("--rationale <text>", "Review rationale")
-    .requiredOption("--context-bundle-id <id>", "Context bundle ID used for review")
     .option("--score <n>", "Score 0-1")
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
         const { client, profile } = getCoordinatorClient();
+        const principalId = requirePrincipalId(profile);
         const agentId = requireAgentId(profile);
-        const r = await client.submitReview({
-          target: { kind: "submission", submissionId: opts.submissionId as string },
-          reviewerId: agentId,
-          result: opts.result as string,
-          rationale: opts.rationale as string,
-          contextBundleId: opts.contextBundleId as string,
-          score: opts.score ? parseFloat(opts.score as string) : undefined,
-          evidence: [],
+        const receipt = await client.submitActionIntent({
+          type: "SubmitReview",
+          principalId,
+          projectId: profile.projectId,
+          payload: {
+            target: { kind: "submission", submissionId: opts.submissionId as string },
+            reviewerId: agentId,
+            result: opts.result as string,
+            rationale: opts.rationale as string,
+            score: opts.score ? parseFloat(opts.score as string) : undefined,
+          },
+          idempotencyKey: randomUUID(),
         });
-        printOutput(outputOk(r), Boolean(opts.json), () => `Review submitted: ${r.id}`);
+        printOutput(outputOk(receipt), Boolean(opts.json), () => `Review submitted (eventId: ${receipt.eventId})`);
       } catch (e) {
         handleCliError(e, opts.json as boolean | undefined);
       }

@@ -63,3 +63,42 @@ CREATE TABLE IF NOT EXISTS local_runtimes (
   runtime_binding_id TEXT,
   registered_at TEXT NOT NULL
 );
+
+-- v0.2: Organization cache
+CREATE TABLE IF NOT EXISTS local_organizations (
+  id TEXT PRIMARY KEY,
+  data_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+-- v0.2: Handbook cache (per project)
+CREATE TABLE IF NOT EXISTS local_handbooks (
+  scope TEXT NOT NULL,
+  scope_id TEXT NOT NULL,
+  data_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (scope, scope_id)
+);
+
+-- v0.2: Mechanism cache
+CREATE TABLE IF NOT EXISTS local_mechanisms (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT,
+  data_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_local_mechanisms_org ON local_mechanisms(organization_id);
+
+-- v0.2: Queue items (obligations, observations, discussions, tasks, reviews, votes)
+CREATE TABLE IF NOT EXISTS local_queue_items (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  payload_json TEXT NOT NULL,
+  assigned_at TEXT,
+  deadline TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_local_queue_items_kind ON local_queue_items(kind, status);

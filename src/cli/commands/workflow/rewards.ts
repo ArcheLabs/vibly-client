@@ -1,5 +1,6 @@
 import type { Command } from "commander";
-import { requireAgentId } from "../../../config/profiles.js";
+import { randomUUID } from "node:crypto";
+import { requireAgentId, requirePrincipalId } from "../../../config/profiles.js";
 import { outputOk, printOutput } from "../../../domain/apiTypes.js";
 import type { RewardIntent } from "../../../coordinator/types.js";
 
@@ -57,9 +58,15 @@ export function registerRewardCommands(program: Command): void {
     .action(async (id: string, opts) => {
       try {
         const { client, profile } = getCoordinatorClient();
+        const principalId = requirePrincipalId(profile);
         const agentId = requireAgentId(profile);
-        await client.claimReward(id, { actorId: agentId });
-        printOutput(outputOk({ id }), Boolean(opts.json), () => `Reward ${ id } claimed`);
+        const receipt = await client.submitActionIntent({
+          type: "ClaimReward",
+          principalId,
+          payload: { rewardIntentId: id, actorId: agentId },
+          idempotencyKey: randomUUID(),
+        });
+        printOutput(outputOk(receipt), Boolean(opts.json), () => `Reward ${ id } claimed (eventId: ${receipt.eventId})`);
       } catch (e) {
         handleCliError(e, opts.json as boolean | undefined);
       }

@@ -10,21 +10,27 @@ import { registerRuntimeCommands } from "./identity/runtime.js";
 
 import { registerContextCommands } from "./workflow/context.js";
 import { registerKnowledgeCommands } from "./workflow/knowledge.js";
+import { registerOrganizationCommands } from "./workflow/organization.js";
+import { registerHandbookCommands } from "./workflow/handbook.js";
+import { registerMechanismsCommands } from "./workflow/mechanisms.js";
+import { registerQueueCommands } from "./workflow/queue.js";
+import { registerObservationCommands } from "./workflow/observation.js";
+import { registerDiscussionCommands } from "./workflow/discussion.js";
+import { registerProposalCommands } from "./workflow/proposal.js";
+import { registerTaskCommands } from "./workflow/task.js";
 import { registerProjectCommands } from "./workflow/project.js";
 import { registerReviewCommands } from "./workflow/review.js";
 import { registerRewardCommands } from "./workflow/rewards.js";
-import { registerWorkCommands } from "./workflow/work.js";
 
 import { registerGovernanceCommands } from "./governance/governance.js";
 import { registerNegotiationCommands } from "./governance/negotiation.js";
-import { registerVoteCommands } from "./governance/vote.js";
+import { registerVotingCommands } from "./governance/voting.js";
 
 import { registerDaemonCommands } from "./observability/daemon.js";
 import { registerEventCommands } from "./observability/events.js";
 import { registerSyncCommands } from "./observability/sync.js";
 import { registerTraceCommands } from "./observability/trace.js";
 
-import { registerPhaseAliasCommands } from "./dev/phase-aliases.js";
 import { registerScenarioCommands } from "./dev/scenarios.js";
 
 /**
@@ -43,15 +49,24 @@ export function registerCommands(program: Command): void {
   registerAgentCommands(program);
   registerRuntimeCommands(program);
 
+  registerOrganizationCommands(program);
+  registerHandbookCommands(program);
+  registerMechanismsCommands(program);
+
   registerProjectCommands(program);
   registerContextCommands(program);
   registerKnowledgeCommands(program);
-  registerWorkCommands(program);
+
+  registerQueueCommands(program);
+  registerObservationCommands(program);
+  registerDiscussionCommands(program);
+  registerProposalCommands(program);
+  registerTaskCommands(program);
   registerReviewCommands(program);
   registerRewardCommands(program);
 
   registerNegotiationCommands(program);
-  registerVoteCommands(program);
+  registerVotingCommands(program);
   registerGovernanceCommands(program);
 
   registerEventCommands(program);
@@ -60,5 +75,4 @@ export function registerCommands(program: Command): void {
   registerDaemonCommands(program);
 
   registerScenarioCommands(program);
-  registerPhaseAliasCommands(program);
 }

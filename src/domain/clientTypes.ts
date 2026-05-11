@@ -1,6 +1,66 @@
 /** Risk levels used for auto-execution policy */
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 
+// ─── ActionIntent ─────────────────────────────────────────────────────────────
+
+export interface ActionIntentInput {
+  type: string;
+  principalId: string;
+  organizationId?: string;
+  projectId?: string;
+  payload: Record<string, unknown>;
+  idempotencyKey?: string;
+}
+
+export interface ActionIntentReceipt {
+  eventId: string;
+  aggregateRef: { kind: string; id: string };
+  status: "accepted";
+  events: unknown[];
+}
+
+// ─── v0.2 Snapshot types ─────────────────────────────────────────────────────
+
+export interface OrganizationSnapshot {
+  id: string;
+  name: string;
+  description?: string;
+  status: string;
+  memberCount?: number;
+  handbook?: unknown;
+  members?: unknown[];
+  authorities?: unknown[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ProjectHandbookSnapshot {
+  projectId: string;
+  content: unknown;
+  updatedAt: string;
+}
+
+export interface MechanismSnapshot {
+  id: string;
+  organizationId: string;
+  projectId?: string;
+  name: string;
+  description?: string;
+  updatedAt: string;
+}
+
+export type QueueKind = "obligation" | "observation" | "discussion" | "task" | "review" | "vote";
+
+export interface QueueItem<T = unknown> {
+  id: string;
+  kind: QueueKind;
+  status: "pending" | "handled" | "skipped" | "expired";
+  payload: T;
+  assignedAt?: string;
+  deadline?: string;
+  updatedAt: string;
+}
+
 /** Result returned by daemon handlers */
 export interface HandlerResult {
   handled: boolean;
@@ -10,7 +70,34 @@ export interface HandlerResult {
   error?: unknown;
 }
 
-/** Input to RuntimeHost.execute() */
+/** v0.2 unified runtime input — replaces RuntimeExecutionInput */
+export interface RuntimeInput {
+  agentId: string;
+  runtimeBindingId: string;
+  assignmentId: string;
+  assignmentKind: "observation" | "discussion" | "task" | "review" | "vote";
+  organization?: OrganizationSnapshot;
+  project?: unknown;
+  handbook?: ProjectHandbookSnapshot;
+  mechanism?: MechanismSnapshot;
+  payload: unknown;
+  contextBundle?: unknown;
+  knowledgeSnapshot?: unknown;
+  workingDirectory: string;
+}
+
+/** v0.2 unified runtime output */
+export interface RuntimeOutput {
+  status: "success" | "failed" | "partial";
+  summary: string;
+  artifact?: { uri: string; hash?: string; mediaType?: string };
+  structuredResult?: unknown;
+  contribution?: string;
+  executionReceipt: ExecutionReceiptData;
+  logs?: string;
+}
+
+/** Legacy input to RuntimeHost (kept for adapter compatibility) */
 export interface RuntimeExecutionInput {
   agentId: string;
   runtimeBindingId: string;

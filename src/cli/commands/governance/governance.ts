@@ -163,21 +163,23 @@ export function registerGovernanceCommands(program: Command): void {
     .option("--submit-args-json <json>", "Raw referenda.submit args JSON")
     .action(async (governanceIntentId: string, opts) => {
       try {
-        const { client } = getCoordinatorClient();
-        const result = await client.submitGovernanceOpenGov(governanceIntentId, {
-          actor: opts.actor,
-          externalId: opts.externalId,
-          subjectId: opts.subjectId,
-          submitArgs: opts.submitArgsJson ? JSON.parse(opts.submitArgsJson) : undefined,
+        const { client, profile } = getCoordinatorClient();
+        const principalId = profile.principalId ?? opts.actor;
+        const result = await client.submitActionIntent({
+          type: "SubmitGovernanceOpenGov",
+          principalId,
+          payload: {
+            governanceIntentId,
+            actor: opts.actor,
+            externalId: opts.externalId,
+            subjectId: opts.subjectId,
+            submitArgs: opts.submitArgsJson ? JSON.parse(opts.submitArgsJson) : undefined,
+          },
         });
         if (program.opts().json) {
           process.stdout.write(JSON.stringify(result, jsonReplacer, 2) + "\n");
         } else {
-          const record = asRecord(result);
-          const receipt = asRecord(record["receipt"]);
-          const tx = asRecord(receipt["tx"]);
-          process.stdout.write(`OpenGov submit recorded: ${String(tx["txHash"] ?? "-")}\n`);
-          process.stdout.write(`Readback: ${String(receipt["readbackStatus"] ?? "pending_indexer")}\n`);
+          process.stdout.write(`OpenGov submit intent accepted (eventId: ${result.eventId})\n`);
         }
       } catch (err) {
         process.stderr.write(`Error: ${String(err)}\n`);
@@ -219,20 +221,23 @@ export function registerGovernanceCommands(program: Command): void {
     .option("--conviction <0-6>", "Conviction multiplier", "0")
     .action(async (subjectId: string, opts) => {
       try {
-        const { client } = getCoordinatorClient();
-        const result = await client.submitGovernanceVoteOpenGov(subjectId, {
-          voter: opts.voter,
-          stance: opts.stance,
-          weight: opts.weight,
-          conviction: opts.conviction,
+        const { client, profile } = getCoordinatorClient();
+        const principalId = profile.principalId ?? opts.voter;
+        const result = await client.submitActionIntent({
+          type: "SubmitGovernanceVoteOpenGov",
+          principalId,
+          payload: {
+            subjectId,
+            voter: opts.voter,
+            stance: opts.stance,
+            weight: opts.weight,
+            conviction: opts.conviction,
+          },
         });
         if (program.opts().json) {
           process.stdout.write(JSON.stringify(result, jsonReplacer, 2) + "\n");
         } else {
-          const receipt = asRecord(asRecord(result)["receipt"]);
-          const tx = asRecord(receipt["tx"]);
-          process.stdout.write(`OpenGov vote recorded: ${String(tx["txHash"] ?? "-")}\n`);
-          process.stdout.write(`Vote readback: ${String(receipt["readbackStatus"] ?? "pending_indexer")}\n`);
+          process.stdout.write(`OpenGov vote intent accepted (eventId: ${result.eventId})\n`);
         }
       } catch (err) {
         process.stderr.write(`Error: ${String(err)}\n`);

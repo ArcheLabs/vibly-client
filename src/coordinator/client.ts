@@ -5,6 +5,13 @@ import { createCliContractClient, type ContractCoordinatorClient } from "./contr
 import { path } from "./contractPaths.js";
 import { CoordinatorApiError } from "./errors.js";
 import type {
+  ActionIntentInput,
+  ActionIntentReceipt,
+  MechanismSnapshot,
+  OrganizationSnapshot,
+  ProjectHandbookSnapshot,
+} from "../domain/clientTypes.js";
+import type {
   Agent,
   ArtifactRef,
   ContextBundle,
@@ -392,42 +399,6 @@ export class CoordinatorClient {
     });
   }
 
-  async claimWorkOrder(
-    workOrderId: string,
-    input: { actorId: string; leaseMs?: number },
-  ): Promise<WorkClaim> {
-    return runContract(async () => {
-      const result = await this.contract.POST("/work-orders/{workOrderId}/claim", {
-        params: { path: { workOrderId } },
-        body: input as never,
-        headers: idempotencyHeaders(),
-      });
-      if (!result.response.ok) throw fromContract(result.error, result.response);
-      return unwrapKey<WorkClaim>(unwrapEnvelope(result.data), "claim");
-    });
-  }
-
-  async submitWorkOrder(
-    workOrderId: string,
-    input: {
-      submittedBy: string;
-      contextBundleId: string;
-      executionReceipt?: unknown;
-      artifacts?: ArtifactRef[];
-      summary: string;
-    },
-  ): Promise<Submission> {
-    return runContract(async () => {
-      const result = await this.contract.POST("/work-orders/{workOrderId}/submit", {
-        params: { path: { workOrderId } },
-        body: input as never,
-        headers: idempotencyHeaders(),
-      });
-      if (!result.response.ok) throw fromContract(result.error, result.response);
-      return unwrapKey<Submission>(unwrapEnvelope(result.data), "submission");
-    });
-  }
-
   // ── Negotiations ─────────────────────────────────────────────────────────────
 
   async listNegotiations(query?: { status?: string; projectId?: string; limit?: number; cursor?: string }): Promise<{ items: NegotiationInstance[]; meta?: PageMeta }> {
@@ -450,50 +421,7 @@ export class CoordinatorClient {
     });
   }
 
-  async submitNegotiationPosition(
-    negotiationId: string,
-    input: { actorId: string; stance: string; rationale: string; score?: number },
-  ): Promise<NegotiationInstance> {
-    return runContract(async () => {
-      const result = await this.contract.POST("/negotiations/{negotiationId}/positions", {
-        params: { path: { negotiationId } },
-        body: input as never,
-        headers: idempotencyHeaders(),
-      });
-      if (!result.response.ok) throw fromContract(result.error, result.response);
-      return unwrapKey<NegotiationInstance>(unwrapEnvelope(result.data), "negotiation");
-    });
-  }
-
-  async closeNegotiation(
-    negotiationId: string,
-    input?: { source?: string },
-  ): Promise<unknown> {
-    return runContract(async () => {
-      const result = await this.contract.POST("/negotiations/{negotiationId}/close", {
-        params: { path: { negotiationId } },
-        body: (input ?? {}) as never,
-      });
-      if (!result.response.ok) throw fromContract(result.error, result.response);
-      return unwrapEnvelope<unknown>(result.data);
-    });
-  }
-
-  // ── Reviews ──────────────────────────────────────────────────────────────────
-
-  async requestReview(input: {
-    target: { kind: string; submissionId?: string; candidateId?: string; actionId?: string };
-    requestedBy: string;
-  }): Promise<unknown> {
-    return runContract(async () => {
-      const result = await this.contract.POST("/reviews/requests", {
-        body: input as never,
-        headers: idempotencyHeaders(),
-      });
-      if (!result.response.ok) throw fromContract(result.error, result.response);
-      return unwrapEnvelope<unknown>(result.data);
-    });
-  }
+  // ── Reviews (read-only) ──────────────────────────────────────────────────────
 
   async listReviews(query?: { targetKind?: string; reviewerId?: string; result?: string; limit?: number }): Promise<{ items: ReviewRecord[]; meta?: PageMeta }> {
     return runContract(async () => {
@@ -505,38 +433,7 @@ export class CoordinatorClient {
     });
   }
 
-  async submitReview(input: {
-    target: { kind: string; submissionId?: string; candidateId?: string; actionId?: string };
-    reviewerId: string;
-    result: string;
-    score?: number;
-    rationale: string;
-    contextBundleId: string;
-    evidence?: unknown[];
-  }): Promise<ReviewRecord> {
-    return runContract(async () => {
-      const result = await this.contract.POST("/reviews", {
-        body: input as never,
-        headers: idempotencyHeaders(),
-      });
-      if (!result.response.ok) throw fromContract(result.error, result.response);
-      return unwrapKey<ReviewRecord>(unwrapEnvelope(result.data), "review");
-    });
-  }
-
-  async aggregateReviews(input: {
-    target: { kind: string; submissionId?: string; candidateId?: string; actionId?: string };
-  }): Promise<unknown> {
-    return runContract(async () => {
-      const result = await this.contract.POST("/reviews/aggregate", {
-        body: input as never,
-      });
-      if (!result.response.ok) throw fromContract(result.error, result.response);
-      return unwrapEnvelope<unknown>(result.data);
-    });
-  }
-
-  // ── Rewards ──────────────────────────────────────────────────────────────────
+  // ── Rewards (read-only) ──────────────────────────────────────────────────────
 
   async listRewards(query?: { actorId?: string; status?: string; limit?: number; cursor?: string }): Promise<{ items: RewardIntent[]; meta?: PageMeta }> {
     return runContract(async () => {
@@ -558,22 +455,7 @@ export class CoordinatorClient {
     });
   }
 
-  async claimReward(
-    rewardIntentId: string,
-    input: { actorId: string },
-  ): Promise<unknown> {
-    return runContract(async () => {
-      const result = await this.contract.POST("/rewards/{rewardIntentId}/claim", {
-        params: { path: { rewardIntentId } },
-        body: input as never,
-        headers: idempotencyHeaders(),
-      });
-      if (!result.response.ok) throw fromContract(result.error, result.response);
-      return unwrapEnvelope<unknown>(result.data);
-    });
-  }
-
-  // ── Governance ─────────────────────────────────────────────────────────────
+  // ── Governance (read + reconcile) ─────────────────────────────────────────────
 
   async listGovernanceMerged(query?: {
     projectId?: string;
@@ -590,28 +472,6 @@ export class CoordinatorClient {
     });
   }
 
-  async submitGovernanceOpenGov(
-    governanceIntentId: string,
-    input: {
-      actor: string;
-      payload?: unknown;
-      submitArgs?: unknown;
-      externalId?: string;
-      subjectId?: string;
-      metadata?: Record<string, unknown>;
-    },
-  ): Promise<unknown> {
-    return runContract(async () => {
-      const result = await this.contract.POST("/governance/intents/{governanceIntentId}/submit-opengov", {
-        params: { path: { governanceIntentId } },
-        body: input as never,
-        headers: idempotencyHeaders(),
-      });
-      if (!result.response.ok) throw fromContract(result.error, result.response);
-      return unwrapEnvelope<unknown>(result.data);
-    });
-  }
-
   async reconcileGovernanceSubject(
     governanceIntentId: string,
     input: { subjectId?: string; externalId?: string; metadata?: Record<string, unknown> },
@@ -620,29 +480,6 @@ export class CoordinatorClient {
       const result = await this.contract.POST("/governance/intents/{governanceIntentId}/reconcile-subject", {
         params: { path: { governanceIntentId } },
         body: input as never,
-      });
-      if (!result.response.ok) throw fromContract(result.error, result.response);
-      return unwrapEnvelope<unknown>(result.data);
-    });
-  }
-
-  async submitGovernanceVoteOpenGov(
-    subjectId: string,
-    input: {
-      voter: string;
-      stance: string;
-      weight?: string;
-      reason?: string;
-      conviction?: string | number;
-      payload?: unknown;
-      metadata?: Record<string, unknown>;
-    },
-  ): Promise<unknown> {
-    return runContract(async () => {
-      const result = await this.contract.POST("/governance/subjects/{subjectId}/vote-opengov", {
-        params: { path: { subjectId } },
-        body: input as never,
-        headers: idempotencyHeaders(),
       });
       if (!result.response.ok) throw fromContract(result.error, result.response);
       return unwrapEnvelope<unknown>(result.data);
@@ -826,6 +663,145 @@ export class CoordinatorClient {
       if (!result.response.ok) throw fromContract(result.error, result.response);
       return toList<unknown>(result.data, "items");
     });
+  }
+
+  // ── ActionIntent (unified write path) ────────────────────────────────────────
+
+  async submitActionIntent(intent: ActionIntentInput): Promise<ActionIntentReceipt> {
+    return runContract(async () => {
+      const result = await fetch(`${this.baseUrl}/action-intents`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.token}`,
+          "Idempotency-Key": intent.idempotencyKey ?? randomUUID(),
+        },
+        body: JSON.stringify(intent),
+      });
+      if (!result.ok) {
+        const text = await result.text().catch(() => "");
+        throw new CoordinatorApiError(result.status, text || "ActionIntent submission failed");
+      }
+      const json = (await result.json()) as unknown;
+      const data = unwrapEnvelope<ActionIntentReceipt>(json);
+      return data as ActionIntentReceipt;
+    });
+  }
+
+  // ── Organizations (v0.2) ─────────────────────────────────────────────────────
+
+  async listOrganizations(query?: { limit?: number; cursor?: string }): Promise<{ items: OrganizationSnapshot[] }> {
+    try {
+      const result = await fetch(
+        `${this.baseUrl}/organizations?${new URLSearchParams(queryFromInput(query))}`,
+        { headers: { Authorization: `Bearer ${this.token}` } },
+      );
+      if (!result.ok) return { items: [] };
+      const json = (await result.json()) as unknown;
+      const items = extractArray(unwrapEnvelope(json)) as OrganizationSnapshot[];
+      return { items };
+    } catch {
+      return { items: [] };
+    }
+  }
+
+  async getOrganization(id: string): Promise<OrganizationSnapshot | null> {
+    try {
+      const result = await fetch(`${this.baseUrl}/organizations/${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${this.token}` },
+      });
+      if (!result.ok) return null;
+      const json = (await result.json()) as unknown;
+      return unwrapKey<OrganizationSnapshot>(unwrapEnvelope(json), "organization");
+    } catch {
+      return null;
+    }
+  }
+
+  // ── Handbooks (v0.2) ─────────────────────────────────────────────────────────
+
+  async getProjectHandbook(projectId: string): Promise<ProjectHandbookSnapshot | null> {
+    try {
+      const result = await fetch(
+        `${this.baseUrl}/projects/${encodeURIComponent(projectId)}/handbook`,
+        { headers: { Authorization: `Bearer ${this.token}` } },
+      );
+      if (!result.ok) return null;
+      const json = (await result.json()) as unknown;
+      const raw = unwrapKey<unknown>(unwrapEnvelope(json), "handbook");
+      if (!raw) return null;
+      return { projectId, content: raw, updatedAt: new Date().toISOString() };
+    } catch {
+      return null;
+    }
+  }
+
+  // ── Mechanisms (v0.2) ────────────────────────────────────────────────────────
+
+  async listMechanisms(query?: { organizationId?: string; projectId?: string; limit?: number }): Promise<{ items: MechanismSnapshot[] }> {
+    try {
+      const result = await fetch(
+        `${this.baseUrl}/mechanisms?${new URLSearchParams(queryFromInput(query))}`,
+        { headers: { Authorization: `Bearer ${this.token}` } },
+      );
+      if (!result.ok) return { items: [] };
+      const json = (await result.json()) as unknown;
+      const items = extractArray(unwrapEnvelope(json)) as MechanismSnapshot[];
+      return { items };
+    } catch {
+      return { items: [] };
+    }
+  }
+
+  // ── Queue Snapshots (v0.2) ───────────────────────────────────────────────────
+
+  async listObligations(query?: { agentId?: string; status?: string; limit?: number }): Promise<{ items: unknown[] }> {
+    return this._listQueue(`/obligations`, query);
+  }
+
+  async listObservationAssignments(query?: { agentId?: string; status?: string; limit?: number }): Promise<{ items: unknown[] }> {
+    return this._listQueue(`/assignments`, { ...query, kind: "observation" });
+  }
+
+  async listDiscussionParticipations(query?: { agentId?: string; status?: string; limit?: number }): Promise<{ items: unknown[] }> {
+    return this._listQueue(`/assignments`, { ...query, kind: "discussion" });
+  }
+
+  async listAvailableTasks(query?: { projectId?: string; limit?: number }): Promise<{ items: unknown[] }> {
+    return this._listQueue(`/work-orders/open`, query);
+  }
+
+  async listAssignedTasks(query?: { agentId?: string; status?: string; limit?: number }): Promise<{ items: unknown[] }> {
+    return this._listQueue(`/work-orders`, { ...query, status: query?.status ?? "claimed" });
+  }
+
+  async listReviewAssignments(query?: { agentId?: string; status?: string; limit?: number }): Promise<{ items: unknown[] }> {
+    return runContract(async () => {
+      const result = await this.contract.GET("/reviews", {
+        params: { query: queryFromInput(query) as never },
+      });
+      if (!result.response.ok) return { items: [] };
+      return toList<unknown>(result.data, "items");
+    });
+  }
+
+  async listVotingAssignments(query?: { agentId?: string; status?: string; limit?: number }): Promise<{ items: unknown[] }> {
+    return this._listQueue(`/negotiations`, { ...query, status: "open" });
+  }
+
+  private async _listQueue(endpoint: string, query?: Record<string, string | number | boolean | undefined>): Promise<{ items: unknown[] }> {
+    try {
+      const result = await fetch(
+        `${this.baseUrl}${endpoint}?${new URLSearchParams(queryFromInput(query))}`,
+        { headers: { Authorization: `Bearer ${this.token}` } },
+      );
+      if (!result.ok) return { items: [] };
+      const json = (await result.json()) as unknown;
+      const items = extractArray(unwrapEnvelope(json)) as unknown[];
+      return { items };
+    } catch {
+      return { items: [] };
+    }
   }
 
   /** Base URL for SSE stream */
