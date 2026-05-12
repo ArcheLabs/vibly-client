@@ -33,6 +33,8 @@ import type {
   WorkOrder,
 } from "./types.js";
 
+type ContractResult = { response: Response; data?: unknown; error?: unknown };
+
 export interface CoordinatorClientOptions {
   baseUrl: string;
   token: string;
@@ -486,6 +488,30 @@ export class CoordinatorClient {
     });
   }
 
+  async submitGovernanceOpenGov(governanceIntentId: string, input: Record<string, unknown>): Promise<unknown> {
+    return runContract(async () => {
+      const result = await this.contract.POST("/governance/intents/{governanceIntentId}/submit-opengov", {
+        params: { path: { governanceIntentId } },
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapEnvelope<unknown>(result.data);
+    });
+  }
+
+  async submitGovernanceVoteOpenGov(subjectId: string, input: Record<string, unknown>): Promise<unknown> {
+    return runContract(async () => {
+      const result = await this.contract.POST("/governance/subjects/{subjectId}/vote-opengov", {
+        params: { path: { subjectId } },
+        body: input as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapEnvelope<unknown>(result.data);
+    });
+  }
+
   async listGovernanceSubjects(query?: {
     backend?: string;
     chainId?: string;
@@ -603,7 +629,7 @@ export class CoordinatorClient {
 
   async runAgentCollaborationScenario(): Promise<unknown> {
     return runContract(async () => {
-      const result = await this.contract.POST("/dev/scenarios/agent-collaboration/runs", {
+      const result = await (this.contract.POST as never as (path: string, init: unknown) => Promise<ContractResult>)("/dev/scenarios/agent-collaboration/runs", {
         body: {} as never,
         headers: idempotencyHeaders(),
       });
@@ -614,7 +640,7 @@ export class CoordinatorClient {
 
   async listAgentCollaborationScenarioRuns(query?: { limit?: number; cursor?: string }): Promise<{ items: unknown[]; meta?: PageMeta }> {
     return runContract(async () => {
-      const result = await this.contract.GET("/dev/scenarios/agent-collaboration/runs", {
+      const result = await (this.contract.GET as never as (path: string, init: unknown) => Promise<ContractResult>)("/dev/scenarios/agent-collaboration/runs", {
         params: { query: queryFromInput(query) as never },
       });
       if (!result.response.ok) throw fromContract(result.error, result.response);
@@ -626,7 +652,7 @@ export class CoordinatorClient {
 
   async runIncentiveRiskScenario(): Promise<unknown> {
     return runContract(async () => {
-      const result = await this.contract.POST("/dev/scenarios/incentive-risk/runs", {
+      const result = await (this.contract.POST as never as (path: string, init: unknown) => Promise<ContractResult>)("/dev/scenarios/incentive-risk/runs", {
         body: {} as never,
         headers: idempotencyHeaders(),
       });
@@ -637,7 +663,7 @@ export class CoordinatorClient {
 
   async listIncentiveRiskScenarioRuns(query?: { projectId?: string; limit?: number; cursor?: string }): Promise<{ items: unknown[]; meta?: PageMeta }> {
     return runContract(async () => {
-      const result = await this.contract.GET("/dev/scenarios/incentive-risk/runs", {
+      const result = await (this.contract.GET as never as (path: string, init: unknown) => Promise<ContractResult>)("/dev/scenarios/incentive-risk/runs", {
         params: { query: queryFromInput(query) as never },
       });
       if (!result.response.ok) throw fromContract(result.error, result.response);
