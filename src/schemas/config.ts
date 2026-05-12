@@ -22,6 +22,7 @@ export const ProfileSchema = z.object({
       autoVote: z.boolean().optional().default(false),
       autoReview: z.boolean().optional().default(false),
       autoClaimRewards: z.boolean().optional().default(false),
+      deterministicE2E: z.boolean().optional().default(false),
       maxConcurrentWork: z.number().int().positive().optional().default(1),
       allowedWorkTypes: z.array(z.string()).optional(),
       deniedWorkTypes: z.array(z.string()).optional(),

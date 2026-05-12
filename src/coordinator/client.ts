@@ -7,6 +7,7 @@ import { CoordinatorApiError } from "./errors.js";
 import type {
   ActionIntentInput,
   ActionIntentReceipt,
+  AgentInbox,
   MechanismSnapshot,
   OrganizationSnapshot,
   ProjectHandbookSnapshot,
@@ -711,6 +712,22 @@ export class CoordinatorClient {
       const json = (await result.json()) as unknown;
       const data = unwrapEnvelope<ActionIntentReceipt>(json);
       return data as ActionIntentReceipt;
+    });
+  }
+
+  async getAgentInbox(principalId: string, query?: { organizationId?: string; projectId?: string; limit?: number }): Promise<AgentInbox> {
+    return runContract(async () => {
+      const result = await fetch(
+        `${this.baseUrl}/agents/${encodeURIComponent(principalId)}/inbox?${new URLSearchParams(queryFromInput(query))}`,
+        { headers: { Authorization: `Bearer ${this.token}` } },
+      );
+      if (!result.ok) {
+        const text = await result.text().catch(() => "");
+        throw new CoordinatorApiError(result.status, text || "Agent inbox request failed");
+      }
+      const json = (await result.json()) as unknown;
+      const data = unwrapEnvelope<{ inbox: AgentInbox }>(json);
+      return data.inbox;
     });
   }
 

@@ -12,6 +12,13 @@ export const ActionIntentTypeSchema = z.enum([
   "VetoProposal",
   "EmergencyPause",
   "EmergencyResume",
+  "RegisterAgentProfile",
+  "UpdateAgentProfile",
+  "RequestAgentDutyPause",
+  "ResumeAgentDuty",
+  "UpsertAgentStakeLedger",
+  "UpsertMechanism",
+  "SeedKnowledgeEntry",
   // Observation
   "CreateObservation",
   "CreateObservationTask",
@@ -31,10 +38,19 @@ export const ActionIntentTypeSchema = z.enum([
   "ClaimTask",
   "SubmitTask",
   "SubmitArtifact",
+  "AcceptArtifact",
+  "RejectArtifact",
+  "AcceptTask",
+  "RejectTask",
   // Review
+  "CreateReviewRound",
   "SubmitReview",
   // Reward / Settlement
   "CreateRewardIntent",
+  "ApproveRewardIntent",
+  "VetoReward",
+  "CreateSettlementBatch",
+  "ConfirmSettlementBatch",
   "SubmitSettlement",
   // Human / Request
   "AnswerRequest",

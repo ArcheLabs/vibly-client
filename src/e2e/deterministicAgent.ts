@@ -58,7 +58,9 @@ export function planDeterministicActions(
 
   for (const discussion of inbox.discussionParticipations ?? []) {
     const round = Array.isArray(discussion.rounds) ? discussion.rounds[0] as Record<string, unknown> | undefined : undefined;
-    if (typeof discussion.id === "string" && typeof round?.index === "number") {
+    const contributions = Array.isArray(round?.contributions) ? round.contributions as Array<Record<string, unknown>> : [];
+    const alreadyContributed = contributions.some((item) => item.authorId === principalId);
+    if (typeof discussion.id === "string" && typeof round?.index === "number" && !alreadyContributed) {
       actions.push({
         type: "SubmitDiscussionContribution",
         principalId,
@@ -68,6 +70,49 @@ export function planDeterministicActions(
           content: "The literature index is the right bootstrap artifact and should become a proposal with reviewable tasks.",
         },
       });
+      if (!discussion.outcome) {
+        actions.push({
+          type: "CloseDiscussionWithOutcome",
+          principalId,
+          payload: {
+            discussionId: discussion.id,
+            outcome: "escalated",
+            summary: "Discussion agrees that Goldbach Literature Index v0.1 should be proposed and reviewed.",
+          },
+        });
+      }
+    }
+  }
+
+  if (agent.behavior.allowAutonomousProposal) {
+    for (const notification of inbox.notifications ?? []) {
+      if (notification.type === "ProposalCreationRequest" && notification.status === "open") {
+        actions.push({
+          type: "SubmitProposal",
+          principalId,
+          payload: {
+            organizationId: notification.organizationId,
+            projectId: notification.projectId,
+            title: "Create Goldbach Literature Index v0.1",
+            body: "Create a first structured literature index so future observations build on durable research context.",
+            discussionRef: typeof notification.payload === "object" && notification.payload
+              ? { kind: "DiscussionThread", id: String((notification.payload as Record<string, unknown>).discussionId ?? "") }
+              : undefined,
+            suggestedTaskPlan: [
+              {
+                title: "Design Literature Index Schema v0.1",
+                description: "Define the reusable fields, source taxonomy, and review criteria for the index.",
+                skillRequirements: ["literature_review"],
+              },
+              {
+                title: "Draft Literature Index v0.1",
+                description: "Collect core references and organize them into a reusable index.",
+                skillRequirements: ["research"],
+              },
+            ],
+          },
+        });
+      }
     }
   }
 
@@ -94,6 +139,32 @@ export function planDeterministicActions(
           type: "ClaimTask",
           principalId,
           payload: { organizationId: task.organizationId, taskId: task.id },
+        });
+      }
+      if ((task.status === "claimed" || task.status === "in-progress") && task.assigneeId === principalId && typeof task.id === "string" && typeof task.organizationId === "string") {
+        actions.push({
+          type: "SubmitArtifact",
+          principalId,
+          payload: {
+            organizationId: task.organizationId,
+            taskId: task.id,
+            title: String(task.title ?? "").includes("Schema")
+              ? "Goldbach Literature Schema v0.1"
+              : "Goldbach Literature Index v0.1",
+            mimeType: "text/markdown",
+            contentRef: `inline://${task.id}-deterministic-artifact`,
+            description: "Literature Index v0.1: deterministic source schema, curated references, relevance notes, and reusable taxonomy.",
+            tags: ["literature-index", "goldbach"],
+          },
+        });
+        actions.push({
+          type: "SubmitTask",
+          principalId,
+          payload: {
+            organizationId: task.organizationId,
+            taskId: task.id,
+            summary: "Submitted Literature Index v0.1 with deterministic references and taxonomy.",
+          },
         });
       }
     }

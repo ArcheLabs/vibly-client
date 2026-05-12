@@ -19,6 +19,18 @@ export interface ActionIntentReceipt {
   events: unknown[];
 }
 
+export interface AgentInbox {
+  principalId: string;
+  agent?: Record<string, unknown>;
+  assignmentOffers?: Array<Record<string, unknown>>;
+  discussionParticipations?: Array<Record<string, unknown>>;
+  reviewRequests?: Array<Record<string, unknown>>;
+  availableTasks?: Array<Record<string, unknown>>;
+  notifications?: Array<Record<string, unknown>>;
+  knowledgeSnapshot?: { entries?: Array<Record<string, unknown>>; version?: number };
+  rewardIntents?: Array<Record<string, unknown>>;
+}
+
 // ─── v0.2 Snapshot types ─────────────────────────────────────────────────────
 
 export interface OrganizationSnapshot {
@@ -156,6 +168,7 @@ export interface ClientProfile {
     autoVote?: boolean;
     autoReview?: boolean;
     autoClaimRewards?: boolean;
+    deterministicE2E?: boolean;
     maxConcurrentWork?: number;
     allowedWorkTypes?: string[];
     deniedWorkTypes?: string[];

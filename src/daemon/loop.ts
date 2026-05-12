@@ -5,6 +5,7 @@ import { syncHandler } from "./handlers/syncHandler.js";
 import { voteHandler } from "./handlers/voteHandler.js";
 import { reviewHandler } from "./handlers/reviewHandler.js";
 import { rewardHandler } from "./handlers/rewardHandler.js";
+import { deterministicE2eHandler } from "./handlers/deterministicE2eHandler.js";
 import { getLogger } from "../config/logger.js";
 
 export async function runLoop(
@@ -15,7 +16,14 @@ export async function runLoop(
   const log = getLogger();
   log.debug("daemon: running loop iteration");
 
-  await syncHandler(client, profile);
+  if (!daemonConfig.deterministicE2E) {
+    try {
+      await syncHandler(client, profile);
+    } catch (e) {
+      log.warn({ err: String(e) }, "daemon: sync handler failed");
+    }
+  }
+  await deterministicE2eHandler(client, profile, daemonConfig);
   await voteHandler(client, profile, daemonConfig);
   await reviewHandler(client, profile, daemonConfig);
   await rewardHandler(client, profile, daemonConfig);

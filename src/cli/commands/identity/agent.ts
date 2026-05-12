@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { randomUUID } from "node:crypto";
 import { requirePrincipalId, requireAgentId } from "../../../config/profiles.js";
 import { saveConfig } from "../../../config/config.js";
 import { outputOk, printOutput } from "../../../domain/apiTypes.js";
@@ -80,6 +81,47 @@ export function registerAgentCommands(program: Command): void {
     });
 
   agent
+    .command("pause")
+    .description("Pause public-duty eligibility for the current agent")
+    .option("--reason <reason>", "Reason for pausing public duties")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const { client, profile } = getCoordinatorClient();
+        const principalId = requirePrincipalId(profile);
+        const receipt = await client.submitActionIntent({
+          type: "RequestAgentDutyPause",
+          principalId,
+          payload: { principalId, reason: opts.reason as string | undefined },
+          idempotencyKey: randomUUID(),
+        });
+        printOutput(outputOk(receipt), Boolean(opts.json), () => `Agent public duties paused (eventId: ${receipt.eventId})`);
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
+
+  agent
+    .command("resume")
+    .description("Resume public-duty eligibility for the current agent")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const { client, profile } = getCoordinatorClient();
+        const principalId = requirePrincipalId(profile);
+        const receipt = await client.submitActionIntent({
+          type: "ResumeAgentDuty",
+          principalId,
+          payload: { principalId },
+          idempotencyKey: randomUUID(),
+        });
+        printOutput(outputOk(receipt), Boolean(opts.json), () => `Agent public duties resumed (eventId: ${receipt.eventId})`);
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
+
+  agent
     .command("bind-runtime")
     .description("Create a runtime binding for the current agent")
     .requiredOption("--kind <kind>", "Runtime kind (e.g. script, docker, wasm)")
@@ -108,4 +150,3 @@ export function registerAgentCommands(program: Command): void {
       }
     });
 }
-
