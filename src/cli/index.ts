@@ -10,7 +10,6 @@ export function buildCli(): Command {
     .version("0.1.0")
     .option("--profile <name>", "Profile to use")
     .option("--config <path>", "Config file path")
-    .option("--json", "Output as machine-readable JSON")
     .option("--verbose", "Verbose logging")
     .option("--coordinator-url <url>", "Override coordinator URL")
     .option("--api-token <token>", "Override API token")
