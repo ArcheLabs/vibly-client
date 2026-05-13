@@ -6,6 +6,7 @@ import { outputOk, printOutput } from "../../../domain/apiTypes.js";
 import { getCoordinatorClient } from "../shared/client.js";
 import { handleCliError } from "../shared/errors.js";
 import { submitAgentStakeTx } from "../../../chain/agentStaking.js";
+import { submitIdentityOnboardingTx } from "../../../chain/identityOnboarding.js";
 
 export function registerAgentCommands(program: Command): void {
   const agent = program.command("agent").description("Manage agents");
@@ -237,6 +238,11 @@ export function registerAgentCommands(program: Command): void {
         handleCliError(e, opts.json as boolean | undefined);
       }
     });
+
+  // Chain-level identity / onboarding commands.
+  registerChainIdentityCommands(agent);
+  registerChainRegistrarCommands(agent);
+  registerChainRegisterAgentCommands(agent);
 }
 
 async function runStakeTx(kind: "bond" | "request-unbond" | "cancel-unbond" | "release-unbond", opts: Record<string, unknown>): Promise<void> {
@@ -258,4 +264,114 @@ async function runStakeTx(kind: "bond" | "request-unbond" | "cancel-unbond" | "r
   } catch (e) {
     handleCliError(e, opts["json"] as boolean | undefined);
   }
+}
+
+// ── Chain-level identity / onboarding commands ────────────────────────────────
+
+function registerChainIdentityCommands(agent: Command): void {
+  const identity = agent
+    .command("identity")
+    .description("Chain-level identity management (pallet_identity_core)");
+
+  identity
+    .command("register-chain")
+    .description("Register a new root identity on chain (pallet_identity_core::register_identity)")
+    .option("--rpc-url <url>", "Substrate WebSocket RPC URL")
+    .option("--signer-uri <uri>", "Signer URI (dev account, e.g. //Alice)")
+    .option("--chain-id <id>", "Chain ID")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const receipt = await submitIdentityOnboardingTx({
+          kind: "register-identity",
+          signer: {
+            rpcUrl: opts.rpcUrl as string | undefined,
+            signerUri: opts.signerUri as string | undefined,
+            chainId: opts.chainId as string | undefined,
+          },
+        });
+        printOutput(
+          outputOk(receipt),
+          Boolean(opts.json),
+          () => `Identity registered on chain: identityId=${String(receipt.identityId)} txHash=${receipt.txHash}`,
+        );
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
+}
+
+function registerChainRegistrarCommands(agent: Command): void {
+  agent
+    .command("set-registrar")
+    .description(
+      "Authorise a registrar account for an identity (pallet_onboarding_distribution::set_agent_registrar)",
+    )
+    .requiredOption("--identity-id <id>", "Identity ID (0x hex H256)")
+    .requiredOption("--registrar-key <key>", "AccountId (SS58 or hex) to authorise as registrar")
+    .option("--rpc-url <url>", "Substrate WebSocket RPC URL")
+    .option("--signer-uri <uri>", "Signer URI (must be identity owner)")
+    .option("--chain-id <id>", "Chain ID")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const receipt = await submitIdentityOnboardingTx({
+          kind: "set-agent-registrar",
+          identityId: opts.identityId as string,
+          registrarKey: opts.registrarKey as string,
+          signer: {
+            rpcUrl: opts.rpcUrl as string | undefined,
+            signerUri: opts.signerUri as string | undefined,
+            chainId: opts.chainId as string | undefined,
+          },
+        });
+        printOutput(
+          outputOk(receipt),
+          Boolean(opts.json),
+          () =>
+            `Agent registrar set for identity ${String(opts.identityId)}: txHash=${receipt.txHash}`,
+        );
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
+}
+
+function registerChainRegisterAgentCommands(agent: Command): void {
+  agent
+    .command("register-chain")
+    .description(
+      "Register an agent on chain (pallet_onboarding_distribution::register_agent)",
+    )
+    .requiredOption("--identity-id <id>", "Identity ID (0x hex H256)")
+    .requiredOption(
+      "--agent-ref <ref>",
+      'ContentRef for the agent: "hash:0x<64hex>" or "uri:<uri>"',
+    )
+    .option("--rpc-url <url>", "Substrate WebSocket RPC URL")
+    .option("--signer-uri <uri>", "Signer URI (identity owner or authorised registrar)")
+    .option("--chain-id <id>", "Chain ID")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const receipt = await submitIdentityOnboardingTx({
+          kind: "register-agent",
+          identityId: opts.identityId as string,
+          agentRef: opts.agentRef as string,
+          signer: {
+            rpcUrl: opts.rpcUrl as string | undefined,
+            signerUri: opts.signerUri as string | undefined,
+            chainId: opts.chainId as string | undefined,
+          },
+        });
+        printOutput(
+          outputOk(receipt),
+          Boolean(opts.json),
+          () =>
+            `Agent registered on chain: agentId=${String(receipt.agentId)} txHash=${receipt.txHash}`,
+        );
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
 }
