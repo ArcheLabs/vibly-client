@@ -2,6 +2,7 @@ import { CoordinatorClient } from "../coordinator/client.js";
 import { loadActiveProfile, requireApiToken } from "../config/profiles.js";
 import { setLogger, createLogger } from "../config/logger.js";
 import { DaemonConfigSchema } from "../schemas/daemon.js";
+import { subscribeSse } from "../coordinator/sse.js";
 import { runLoop } from "./loop.js";
 import type { DaemonConfig } from "../schemas/daemon.js";
 
@@ -35,11 +36,23 @@ export async function startDaemon(opts: DaemonStartOptions = {}): Promise<void> 
   }
 
   // Foreground long-running loop
+  let running = false;
+  let rerunRequested = false;
   const run = async () => {
+    if (running) {
+      rerunRequested = true;
+      return;
+    }
+    running = true;
     try {
-      await runLoop(client, profile, daemonConfig);
+      do {
+        rerunRequested = false;
+        await runLoop(client, profile, daemonConfig);
+      } while (rerunRequested);
     } catch (e) {
       log.error({ err: String(e) }, "daemon: loop error");
+    } finally {
+      running = false;
     }
   };
 
@@ -49,11 +62,33 @@ export async function startDaemon(opts: DaemonStartOptions = {}): Promise<void> 
   const timer = setInterval(() => {
     void run();
   }, daemonConfig.intervalMs);
+  const sseController = new AbortController();
+
+  if (profile.sync?.enableSse !== false) {
+    void subscribeSse({
+      url: client.getStreamUrl(profile.projectId),
+      token,
+      signal: sseController.signal,
+      onConnect: () => log.info("daemon: SSE connected"),
+      onEvent: (event) => {
+        log.debug({ type: event.type }, "daemon: SSE event received");
+        void run();
+      },
+      onError: (err, attempt) => {
+        log.warn({ err: err.message, attempt }, "daemon: SSE disconnected");
+      },
+    });
+  }
 
   // Keep alive until interrupted
   await new Promise<void>((resolve) => {
-    process.once("SIGINT", () => { clearInterval(timer); resolve(); });
-    process.once("SIGTERM", () => { clearInterval(timer); resolve(); });
+    const stop = () => {
+      clearInterval(timer);
+      sseController.abort();
+      resolve();
+    };
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
   });
 
   log.info("daemon: stopped");

@@ -1,0 +1,4 @@
+packages:
+  - "."
+  - "../concord/packages/*"
+  - "../vibly-coordinator-http-contract"

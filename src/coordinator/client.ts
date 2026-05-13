@@ -802,6 +802,10 @@ export class CoordinatorClient {
     return this._listQueue(`/obligations`, query);
   }
 
+  async listAgentStakes(query?: { principalId?: string; chainId?: string; status?: string; limit?: number }): Promise<{ items: unknown[] }> {
+    return this._listQueue(`/agent-stakes`, query);
+  }
+
   async listObservationAssignments(query?: { agentId?: string; status?: string; limit?: number }): Promise<{ items: unknown[] }> {
     return this._listQueue(`/assignments`, { ...query, kind: "observation" });
   }

@@ -5,6 +5,7 @@ import { saveConfig } from "../../../config/config.js";
 import { outputOk, printOutput } from "../../../domain/apiTypes.js";
 import { getCoordinatorClient } from "../shared/client.js";
 import { handleCliError } from "../shared/errors.js";
+import { submitAgentStakeTx } from "../../../chain/agentStaking.js";
 
 export function registerAgentCommands(program: Command): void {
   const agent = program.command("agent").description("Manage agents");
@@ -121,6 +122,93 @@ export function registerAgentCommands(program: Command): void {
       }
     });
 
+  const stake = agent.command("stake").description("Manage chain-backed agent stake");
+
+  stake
+    .command("status")
+    .description("Show stake ledgers synced by coordinator")
+    .option("--principal-id <id>", "Principal ID (defaults to active profile principal)")
+    .option("--chain-id <id>", "Chain ID filter")
+    .option("--status <status>", "Stake status filter (active|unbonding|released)")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const { client, profile } = getCoordinatorClient();
+        const principalId = (opts.principalId as string | undefined) ?? profile.principalId;
+        const result = await client.listAgentStakes({
+          principalId,
+          chainId: opts.chainId as string | undefined,
+          status: opts.status as string | undefined,
+          limit: 50,
+        });
+        printOutput(outputOk(result), Boolean(opts.json), (d) => {
+          const items = Array.isArray((d as { items?: unknown[] }).items) ? (d as { items: unknown[] }).items : [];
+          return items.length === 0
+            ? "No stake ledgers found"
+            : items.map((item) => {
+              const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
+              return `${String(row["identityId"] ?? "?")}/${String(row["chainAgentId"] ?? row["agentId"] ?? "?")} ${String(row["status"] ?? "?")} active=${String(row["activeAmount"] ?? "0")} unbonding=${String(row["unbondingAmount"] ?? "0")}`;
+            }).join("\n");
+        });
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
+
+  stake
+    .command("bond")
+    .description("Bond stake for an agent identity on chain")
+    .requiredOption("--identity-id <id>", "Identity ID")
+    .option("--agent-id <id>", "Chain agent ID (defaults to profile agentId)")
+    .requiredOption("--amount <amount>", "Amount to hold")
+    .option("--rpc-url <url>", "Substrate WebSocket RPC URL")
+    .option("--signer-uri <uri>", "Signer URI; root or authorized agent/operator")
+    .option("--chain-id <id>", "Chain ID")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      await runStakeTx("bond", opts);
+    });
+
+  stake
+    .command("request-unbond")
+    .description("Request delayed unbond for an agent")
+    .requiredOption("--identity-id <id>", "Identity ID")
+    .option("--agent-id <id>", "Chain agent ID (defaults to profile agentId)")
+    .requiredOption("--amount <amount>", "Amount to unbond")
+    .option("--rpc-url <url>", "Substrate WebSocket RPC URL")
+    .option("--signer-uri <uri>", "Signer URI; root or authorized agent/operator")
+    .option("--chain-id <id>", "Chain ID")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      await runStakeTx("request-unbond", opts);
+    });
+
+  stake
+    .command("cancel-unbond")
+    .description("Cancel pending unbond for an agent")
+    .requiredOption("--identity-id <id>", "Identity ID")
+    .option("--agent-id <id>", "Chain agent ID (defaults to profile agentId)")
+    .option("--rpc-url <url>", "Substrate WebSocket RPC URL")
+    .option("--signer-uri <uri>", "Signer URI; root or authorized agent/operator")
+    .option("--chain-id <id>", "Chain ID")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      await runStakeTx("cancel-unbond", opts);
+    });
+
+  stake
+    .command("release-unbond")
+    .description("Release unbonded stake after unlock")
+    .requiredOption("--identity-id <id>", "Identity ID")
+    .option("--agent-id <id>", "Chain agent ID (defaults to profile agentId)")
+    .option("--rpc-url <url>", "Substrate WebSocket RPC URL")
+    .option("--signer-uri <uri>", "Signer URI; root or authorized agent/operator")
+    .option("--chain-id <id>", "Chain ID")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      await runStakeTx("release-unbond", opts);
+    });
+
   agent
     .command("bind-runtime")
     .description("Create a runtime binding for the current agent")
@@ -149,4 +237,25 @@ export function registerAgentCommands(program: Command): void {
         handleCliError(e, opts.json as boolean | undefined);
       }
     });
+}
+
+async function runStakeTx(kind: "bond" | "request-unbond" | "cancel-unbond" | "release-unbond", opts: Record<string, unknown>): Promise<void> {
+  try {
+    const { profile } = getCoordinatorClient();
+    const agentId = (opts["agentId"] as string | undefined) ?? requireAgentId(profile);
+    const receipt = await submitAgentStakeTx({
+      kind,
+      identityId: opts["identityId"] as string,
+      agentId,
+      amount: opts["amount"] as string | undefined,
+      signer: {
+        rpcUrl: opts["rpcUrl"] as string | undefined,
+        signerUri: opts["signerUri"] as string | undefined,
+        chainId: opts["chainId"] as string | undefined,
+      },
+    });
+    printOutput(outputOk(receipt), Boolean(opts["json"]), () => `${kind} submitted: ${receipt.txHash}`);
+  } catch (e) {
+    handleCliError(e, opts["json"] as boolean | undefined);
+  }
 }
