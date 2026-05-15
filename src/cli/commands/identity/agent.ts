@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { randomUUID } from "node:crypto";
-import { requirePrincipalId, requireAgentId } from "../../../config/profiles.js";
+import { loadActiveProfile, requirePrincipalId, requireAgentId } from "../../../config/profiles.js";
 import { saveConfig } from "../../../config/config.js";
 import { outputOk, printOutput } from "../../../domain/apiTypes.js";
 import { getCoordinatorClient } from "../shared/client.js";
@@ -247,8 +247,7 @@ export function registerAgentCommands(program: Command): void {
 
 async function runStakeTx(kind: "bond" | "request-unbond" | "cancel-unbond" | "release-unbond", opts: Record<string, unknown>): Promise<void> {
   try {
-    const { profile } = getCoordinatorClient();
-    const agentId = (opts["agentId"] as string | undefined) ?? requireAgentId(profile);
+    const agentId = (opts["agentId"] as string | undefined) ?? requireAgentId(loadActiveProfile().profile);
     const receipt = await submitAgentStakeTx({
       kind,
       identityId: opts["identityId"] as string,
