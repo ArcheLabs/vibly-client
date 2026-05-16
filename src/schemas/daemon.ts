@@ -8,7 +8,7 @@ export const AutoVoteRuleSchema = z.object({
 });
 
 export const DaemonConfigSchema = z.object({
-  intervalMs: z.number().int().positive().default(30000),
+  intervalMs: z.number().int().positive().default(300000),
   autoClaim: z.boolean().default(false),
   autoRun: z.boolean().default(false),
   autoSubmit: z.boolean().default(false),

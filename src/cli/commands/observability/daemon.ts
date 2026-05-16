@@ -9,7 +9,7 @@ export function registerDaemonCommands(program: Command): void {
   daemon
     .command("start")
     .description("Start the daemon (foreground long-running process)")
-    .option("--interval <ms>", "Poll interval in milliseconds", "30000")
+    .option("--interval <ms>", "Poll interval in milliseconds", "300000")
     .option("--verbose", "Enable debug logging")
     .action(async (opts) => {
       const { startDaemon } = await import("../../../daemon/daemon.js");

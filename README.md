@@ -124,7 +124,7 @@ Coordinator read path:
 The daemon polls for work items assigned to registered agents, executes the bound script runtime, and submits results back to the coordinator. It also listens on the coordinator SSE stream for real-time assignment notifications.
 
 ```bash
-vibly daemon start [--interval 30000] [--once]
+vibly daemon start [--interval 300000] [--once]
 ```
 
 ## Transport policy

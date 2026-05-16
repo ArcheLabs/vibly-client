@@ -23,7 +23,7 @@ export async function startDaemon(opts: DaemonStartOptions = {}): Promise<void> 
   const daemonProfile = profile.daemon ?? {};
   const daemonConfig: DaemonConfig = DaemonConfigSchema.parse({
     ...daemonProfile,
-    intervalMs: opts.intervalMs ?? 30000,
+    intervalMs: opts.intervalMs ?? 300000,
   });
 
   log.info({ profile: profile.name, coordinator: profile.coordinatorUrl }, "daemon: starting");
