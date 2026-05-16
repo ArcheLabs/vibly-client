@@ -6,6 +6,7 @@ import { voteHandler } from "./handlers/voteHandler.js";
 import { reviewHandler } from "./handlers/reviewHandler.js";
 import { rewardHandler } from "./handlers/rewardHandler.js";
 import { deterministicE2eHandler } from "./handlers/deterministicE2eHandler.js";
+import { llmE2eHandler } from "./handlers/llmE2eHandler.js";
 import { getLogger } from "../config/logger.js";
 
 export async function runLoop(
@@ -24,6 +25,7 @@ export async function runLoop(
     }
   }
   await deterministicE2eHandler(client, profile, daemonConfig);
+  await llmE2eHandler(client, profile, daemonConfig);
   await voteHandler(client, profile, daemonConfig);
   await reviewHandler(client, profile, daemonConfig);
   await rewardHandler(client, profile, daemonConfig);

@@ -169,6 +169,7 @@ export interface ClientProfile {
     autoReview?: boolean;
     autoClaimRewards?: boolean;
     deterministicE2E?: boolean;
+    llmE2E?: boolean;
     maxConcurrentWork?: number;
     allowedWorkTypes?: string[];
     deniedWorkTypes?: string[];

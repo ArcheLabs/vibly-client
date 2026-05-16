@@ -16,6 +16,7 @@ export const DaemonConfigSchema = z.object({
   autoReview: z.boolean().default(false),
   autoClaimRewards: z.boolean().default(false),
   deterministicE2E: z.boolean().default(false),
+  llmE2E: z.boolean().default(false),
   autoVoteRules: z.array(AutoVoteRuleSchema).default([]),
   maxConcurrentRuns: z.number().int().positive().default(1),
 });
