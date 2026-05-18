@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { loadActiveProfile, requirePrincipalId, requireAgentId } from "../../../config/profiles.js";
 import { saveConfig } from "../../../config/config.js";
 import { outputOk, printOutput } from "../../../domain/apiTypes.js";
@@ -123,6 +124,8 @@ export function registerAgentCommands(program: Command): void {
       }
     });
 
+  registerAgentDescriptorCommands(agent);
+
   const stake = agent.command("stake").description("Manage chain-backed agent stake");
 
   stake
@@ -245,6 +248,69 @@ export function registerAgentCommands(program: Command): void {
   registerChainRegisterAgentCommands(agent);
 }
 
+function registerAgentDescriptorCommands(agent: Command): void {
+  const descriptor = agent.command("descriptor").description("Generate agent enrollment descriptors");
+
+  descriptor
+    .command("generate")
+    .description("Generate a local session key and public agent descriptor")
+    .requiredOption("--name <name>", "Agent display name")
+    .option("--capabilities <caps>", "Comma-separated capability list")
+    .option("--organization-ids <ids>", "Comma-separated organization IDs", "default")
+    .option("--scopes <scopes>", "Comma-separated session scopes", "availability,task_result,pause_duty,resume_duty")
+    .option("--stake-limit <amount>", "Maximum VIB stake this session key may operate")
+    .option("--expires-at <iso>", "Session key expiration timestamp")
+    .option("--identity-id <id>", "Chain identity ID")
+    .option("--chain-agent-id <id>", "Chain agent ID")
+    .option("--chain-id <id>", "Chain ID")
+    .option("--descriptor-out <path>", "Write descriptor JSON to file")
+    .option("--secret-out <path>", "Write local session secret JSON to file")
+    .option("--json", "Output descriptor as JSON")
+    .action(async (opts) => {
+      try {
+        const [keyringModule, cryptoModule] = await Promise.all([
+          dynamicImport("@polkadot/keyring"),
+          dynamicImport("@polkadot/util-crypto"),
+        ]);
+        const { Keyring } = keyringModule as {
+          Keyring: new (options: { type: "sr25519" }) => { addFromUri: (uri: string) => { address: string } };
+        };
+        const { cryptoWaitReady, mnemonicGenerate } = cryptoModule as {
+          cryptoWaitReady: () => Promise<void>;
+          mnemonicGenerate: () => string;
+        };
+        await cryptoWaitReady();
+        const mnemonic = mnemonicGenerate();
+        const keyring = new Keyring({ type: "sr25519" });
+        const pair = keyring.addFromUri(mnemonic);
+        const descriptorValue = {
+          displayName: opts.name as string,
+          sessionPublicKey: pair.address,
+          keyType: "sr25519",
+          capabilities: splitCsv(opts.capabilities as string | undefined),
+          organizationIds: splitCsv(opts.organizationIds as string | undefined, ["default"]),
+          scopes: splitCsv(opts.scopes as string | undefined, ["availability", "task_result", "pause_duty", "resume_duty"]),
+          ...(opts.stakeLimit ? { stakeLimit: opts.stakeLimit as string } : {}),
+          ...(opts.expiresAt ? { expiresAt: opts.expiresAt as string } : {}),
+          ...(opts.identityId ? { identityId: opts.identityId as string } : {}),
+          ...(opts.chainAgentId ? { chainAgentId: opts.chainAgentId as string } : {}),
+          ...(opts.chainId ? { chainId: opts.chainId as string } : {}),
+        };
+        const secret = {
+          keyType: "sr25519",
+          signerUri: mnemonic,
+          sessionPublicKey: pair.address,
+          createdAt: new Date().toISOString(),
+        };
+        if (opts.descriptorOut) await writeFile(String(opts.descriptorOut), `${JSON.stringify(descriptorValue, null, 2)}\n`, "utf8");
+        if (opts.secretOut) await writeFile(String(opts.secretOut), `${JSON.stringify(secret, null, 2)}\n`, "utf8");
+        printOutput(outputOk(descriptorValue), Boolean(opts.json), () => JSON.stringify(descriptorValue, null, 2));
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
+}
+
 async function runStakeTx(kind: "bond" | "request-unbond" | "cancel-unbond" | "release-unbond", opts: Record<string, unknown>): Promise<void> {
   try {
     const agentId = (opts["agentId"] as string | undefined) ?? requireAgentId(loadActiveProfile().profile);
@@ -263,6 +329,16 @@ async function runStakeTx(kind: "bond" | "request-unbond" | "cancel-unbond" | "r
   } catch (e) {
     handleCliError(e, opts["json"] as boolean | undefined);
   }
+}
+
+function splitCsv(value: string | undefined, fallback: string[] = []): string[] {
+  if (!value) return fallback;
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function dynamicImport(specifier: string): Promise<Record<string, unknown>> {
+  const loader = new Function("specifier", "return import(specifier)") as (value: string) => Promise<Record<string, unknown>>;
+  return loader(specifier);
 }
 
 // ── Chain-level identity / onboarding commands ────────────────────────────────
