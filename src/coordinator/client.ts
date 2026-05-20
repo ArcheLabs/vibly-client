@@ -39,6 +39,7 @@ type ContractResult = { response: Response; data?: unknown; error?: unknown };
 export interface CoordinatorClientOptions {
   baseUrl: string;
   token: string;
+  networkId?: string;
   /** Maximum retries for GET requests (default: 2) */
   maxRetries?: number;
   /** Base delay in ms for retry backoff (default: 500) */
@@ -60,6 +61,7 @@ export class CoordinatorClient {
     this.contract = createCliContractClient({
       baseUrl: this.baseUrl,
       token: this.token,
+      networkId: opts.networkId,
       maxRetries: this.maxRetries,
       retryBaseMs: this.retryBaseMs,
     });

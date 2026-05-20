@@ -1,5 +1,5 @@
 import { CoordinatorClient } from "../coordinator/client.js";
-import { loadActiveProfile, requireApiToken } from "../config/profiles.js";
+import { assertProfileNetworkState, getNetworkProfile, loadActiveProfile, requireApiToken } from "../config/profiles.js";
 import { setLogger, createLogger } from "../config/logger.js";
 import { DaemonConfigSchema } from "../schemas/daemon.js";
 import { subscribeSse } from "../coordinator/sse.js";
@@ -17,8 +17,10 @@ export async function startDaemon(opts: DaemonStartOptions = {}): Promise<void> 
   setLogger(log);
 
   const { config: _config, profile } = loadActiveProfile();
+  assertProfileNetworkState(profile);
+  const network = getNetworkProfile(profile);
   const token = requireApiToken(profile);
-  const client = new CoordinatorClient({ baseUrl: profile.coordinatorUrl, token });
+  const client = new CoordinatorClient({ baseUrl: network.coordinatorUrl, token, networkId: network.id });
 
   const daemonProfile = profile.daemon ?? {};
   const daemonConfig: DaemonConfig = DaemonConfigSchema.parse({
@@ -26,7 +28,7 @@ export async function startDaemon(opts: DaemonStartOptions = {}): Promise<void> 
     intervalMs: opts.intervalMs ?? 300000,
   });
 
-  log.info({ profile: profile.name, coordinator: profile.coordinatorUrl }, "daemon: starting");
+  log.info({ profile: profile.name, networkId: network.id, coordinator: network.coordinatorUrl }, "daemon: starting");
 
   if (opts.once) {
     log.info("daemon: running single iteration");

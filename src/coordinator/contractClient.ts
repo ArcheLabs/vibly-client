@@ -20,6 +20,7 @@ export type ContractCoordinatorClient = ContractClient;
 export interface CliContractOptions {
   baseUrl: string;
   token: string;
+  networkId?: string;
   /** Maximum retries for GET requests (default: 2). */
   maxRetries?: number;
   /** Base delay in ms for exponential backoff (default: 500). */
@@ -58,6 +59,7 @@ export function createCliContractClient(opts: CliContractOptions): ContractCoord
     fetch: cliFetch,
     headers: {
       Authorization: `Bearer ${opts.token}`,
+      ...(opts.networkId ? { "X-Vibly-Network-Id": opts.networkId } : {}),
     },
   });
 }

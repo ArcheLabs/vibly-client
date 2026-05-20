@@ -149,9 +149,20 @@ export interface ExecutionReceiptData {
 }
 
 /** Local client profile */
+export interface NetworkProfile {
+  id: string;
+  displayName?: string;
+  stage?: "local" | "testnet" | "mainnet" | string;
+  viblyGenesisHash?: string;
+  coordinatorUrl: string;
+  relayRpcUrl?: string;
+  viblyRpcUrl?: string;
+}
+
 export interface ClientProfile {
   name: string;
   coordinatorUrl: string;
+  network?: NetworkProfile;
   principalId?: string;
   agentId?: string;
   projectId?: string;

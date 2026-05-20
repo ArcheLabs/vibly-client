@@ -11,6 +11,12 @@ const DEFAULT_CONFIG: ClientConfig = {
       name: "default",
       coordinatorUrl: "http://localhost:8787",
       apiTokenRef: "env:VIBLY_API_TOKEN",
+      network: {
+        id: "substrate:vibly-solo",
+        displayName: "Vibly Local",
+        stage: "local",
+        coordinatorUrl: "http://localhost:8787",
+      },
     },
   },
 };
