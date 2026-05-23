@@ -213,6 +213,30 @@ export class CoordinatorClient {
     });
   }
 
+  // ── Agent enrollment ─────────────────────────────────────────────────────────
+
+  async createAgentEnrollmentChallenge(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return runContract(async () => {
+      const result = await this.contract.POST("/agent-enrollments/challenges", {
+        body: body as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<Record<string, unknown>>(unwrapEnvelope(result.data), "challenge");
+    });
+  }
+
+  async authorizeAgentEnrollment(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return runContract(async () => {
+      const result = await this.contract.POST("/agent-enrollments/authorizations", {
+        body: body as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<Record<string, unknown>>(unwrapEnvelope(result.data), "authorization");
+    });
+  }
+
   // ── Projects ─────────────────────────────────────────────────────────────────
 
   async createProject(input: {
@@ -818,6 +842,22 @@ export class CoordinatorClient {
 
   async listAvailableTasks(query?: { projectId?: string; limit?: number }): Promise<{ items: unknown[] }> {
     return this._listQueue(`/work-orders/open`, query);
+  }
+
+  async getTask(taskId: string): Promise<unknown> {
+    return runContract(async () => {
+      const result = await fetch(`${this.baseUrl}/tasks/${encodeURIComponent(taskId)}`, {
+        headers: { Authorization: `Bearer ${this.token}` },
+      });
+      if (!result.ok) throw new CoordinatorApiError(result.status, `Failed to fetch task ${taskId}`);
+      const json = (await result.json()) as unknown;
+      const envelope = unwrapEnvelope(json);
+      // Coordinator wraps task under { task: {...} } or returns it directly
+      if (envelope && typeof envelope === "object" && "task" in (envelope as Record<string, unknown>)) {
+        return (envelope as Record<string, unknown>)["task"];
+      }
+      return envelope;
+    });
   }
 
   async listAssignedTasks(query?: { agentId?: string; status?: string; limit?: number }): Promise<{ items: unknown[] }> {

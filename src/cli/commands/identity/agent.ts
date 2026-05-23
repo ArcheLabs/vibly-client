@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { randomUUID } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { writeFile, readFile, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { loadActiveProfile, requirePrincipalId, requireAgentId } from "../../../config/profiles.js";
 import { saveConfig } from "../../../config/config.js";
 import { outputOk, printOutput } from "../../../domain/apiTypes.js";
@@ -8,6 +9,12 @@ import { getCoordinatorClient } from "../shared/client.js";
 import { handleCliError } from "../shared/errors.js";
 import { submitAgentStakeTx } from "../../../chain/agentStaking.js";
 import { submitIdentityOnboardingTx } from "../../../chain/identityOnboarding.js";
+import {
+  getAgentDir,
+  getAgentEnrollmentPath,
+  getAgentSessionKeyPath,
+  getAgentsDir,
+} from "../../../config/paths.js";
 
 export function registerAgentCommands(program: Command): void {
   const agent = program.command("agent").description("Manage agents");
@@ -246,6 +253,7 @@ export function registerAgentCommands(program: Command): void {
   registerChainIdentityCommands(agent);
   registerChainRegistrarCommands(agent);
   registerChainRegisterAgentCommands(agent);
+  registerAgentInitCommands(agent);
 }
 
 function registerAgentDescriptorCommands(agent: Command): void {
@@ -445,6 +453,169 @@ function registerChainRegisterAgentCommands(agent: Command): void {
           () =>
             `Agent registered on chain: agentId=${String(receipt.agentId)} txHash=${receipt.txHash}`,
         );
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
+}
+
+// ── agent init / agent enroll ─────────────────────────────────────────────────
+
+function registerAgentInitCommands(agent: Command): void {
+  // `agent init` — generate session key + enrollment.json locally
+  agent
+    .command("init")
+    .description("Generate a local session key and write enrollment.json (no network call)")
+    .requiredOption("--name <name>", "Agent display name")
+    .option("--capabilities <caps>", "Comma-separated capabilities", "research,code")
+    .option("--organization-ids <ids>", "Comma-separated organization IDs", "default")
+    .option("--scopes <scopes>", "Session key scopes", "availability,task_result,pause_duty,resume_duty")
+    .option("--agent-id <id>", "Explicit local agent ID (auto-generated if omitted)")
+    .option("--force", "Overwrite existing agent directory")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const localId: string = (opts.agentId as string | undefined) ?? `agent_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+        const agentDir = getAgentDir(localId);
+        const enrollPath = getAgentEnrollmentPath(localId);
+        const secretPath = getAgentSessionKeyPath(localId);
+
+        if (existsSync(agentDir) && !opts.force) {
+          process.stderr.write(`Agent directory already exists: ${agentDir}\nUse --force to overwrite.\n`);
+          process.exitCode = 1;
+          return;
+        }
+
+        if (!existsSync(getAgentsDir())) await mkdir(getAgentsDir(), { recursive: true });
+        await mkdir(agentDir, { recursive: true });
+
+        const [keyringModule, cryptoModule] = await Promise.all([
+          dynamicImport("@polkadot/keyring"),
+          dynamicImport("@polkadot/util-crypto"),
+        ]);
+        const { Keyring } = keyringModule as {
+          Keyring: new (options: { type: "sr25519" }) => { addFromUri: (uri: string) => { address: string } };
+        };
+        const { cryptoWaitReady, mnemonicGenerate } = cryptoModule as {
+          cryptoWaitReady: () => Promise<void>;
+          mnemonicGenerate: () => string;
+        };
+        await cryptoWaitReady();
+        const mnemonic = mnemonicGenerate();
+        const keyring = new Keyring({ type: "sr25519" });
+        const pair = keyring.addFromUri(mnemonic);
+
+        const descriptor = {
+          displayName: opts.name as string,
+          sessionPublicKey: pair.address,
+          keyType: "sr25519" as const,
+          capabilities: splitCsv(opts.capabilities as string | undefined, ["research", "code"]),
+          organizationIds: splitCsv(opts.organizationIds as string | undefined, ["default"]),
+          scopes: splitCsv(opts.scopes as string | undefined, ["availability", "task_result", "pause_duty", "resume_duty"]),
+          localAgentId: localId,
+          createdAt: new Date().toISOString(),
+        };
+        const secret = {
+          keyType: "sr25519" as const,
+          signerUri: mnemonic,
+          sessionPublicKey: pair.address,
+          localAgentId: localId,
+          createdAt: new Date().toISOString(),
+        };
+
+        await writeFile(enrollPath, `${JSON.stringify(descriptor, null, 2)}\n`, { mode: 0o644 });
+        await writeFile(secretPath, `${JSON.stringify(secret, null, 2)}\n`, { mode: 0o600 });
+
+        printOutput(outputOk({ localAgentId: localId, enrollPath, secretPath, descriptor }), Boolean(opts.json), () => [
+          `  Agent initialized: ${localId}`,
+          `  Enrollment file  : ${enrollPath}`,
+          `  Session secret   : ${secretPath}  ← KEEP PRIVATE`,
+          ``,
+          `  Next: open Console → Personal Center → Add Local Agent`,
+          `  Paste the contents of ${enrollPath}`,
+        ].join("\n"));
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
+
+  // `agent enroll` — submit enrollment authorization to coordinator after Console sign-off
+  agent
+    .command("enroll")
+    .description("Complete enrollment by submitting signed authorization to coordinator")
+    .requiredOption("--local-agent-id <id>", "Local agent ID created by `agent init`")
+    .requiredOption("--challenge-id <id>", "Enrollment challenge ID (from Console)")
+    .requiredOption("--session-signature <sig>", "Session key signature from `agent sign-challenge`")
+    .requiredOption("--root-signature <sig>", "Root wallet authorization signature (from Console)")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const { client } = getCoordinatorClient();
+        const enrollPath = getAgentEnrollmentPath(opts.localAgentId as string);
+
+        if (!existsSync(enrollPath)) {
+          process.stderr.write(`Enrollment file not found: ${enrollPath}\nRun \`vibly agent init\` first.\n`);
+          process.exitCode = 1;
+          return;
+        }
+
+        const descriptor = JSON.parse(await readFile(enrollPath, "utf8")) as Record<string, unknown>;
+
+        const authorization = await client.authorizeAgentEnrollment({
+          challengeId: opts.challengeId as string,
+          descriptor,
+          sessionSignature: opts.sessionSignature as string,
+          rootAuthorizationSignature: opts.rootSignature as string,
+        });
+
+        printOutput(outputOk(authorization), Boolean(opts.json), (d) => {
+          const auth = d as Record<string, unknown>;
+          return `  Enrollment authorized. Session key active.\n  Authorization ID: ${String(auth["id"] ?? auth["authorizationId"] ?? "?")}`;
+        });
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
+
+  // `agent sign-challenge` — sign an enrollment challenge message with the session key
+  agent
+    .command("sign-challenge")
+    .description("Sign an enrollment challenge message with the local session key")
+    .requiredOption("--local-agent-id <id>", "Local agent ID")
+    .requiredOption("--message <msg>", "Challenge message to sign")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const secretPath = getAgentSessionKeyPath(opts.localAgentId as string);
+        if (!existsSync(secretPath)) {
+          process.stderr.write(`Session secret not found: ${secretPath}\n`);
+          process.exitCode = 1;
+          return;
+        }
+        const secret = JSON.parse(await readFile(secretPath, "utf8")) as { signerUri: string };
+
+        const [keyringModule, cryptoModule, utilModule] = await Promise.all([
+          dynamicImport("@polkadot/keyring"),
+          dynamicImport("@polkadot/util-crypto"),
+          dynamicImport("@polkadot/util"),
+        ]);
+        const { Keyring } = keyringModule as {
+          Keyring: new (options: { type: "sr25519" }) => {
+            addFromUri: (uri: string) => { sign: (msg: Uint8Array) => Uint8Array };
+          };
+        };
+        const { cryptoWaitReady } = cryptoModule as { cryptoWaitReady: () => Promise<void> };
+        const { u8aToHex, stringToU8a } = utilModule as {
+          u8aToHex: (bytes: Uint8Array) => string;
+          stringToU8a: (str: string) => Uint8Array;
+        };
+
+        await cryptoWaitReady();
+        const keyring = new Keyring({ type: "sr25519" });
+        const pair = keyring.addFromUri(secret.signerUri);
+        const signature = u8aToHex(pair.sign(stringToU8a(opts.message as string)));
+
+        printOutput(outputOk({ signature }), Boolean(opts.json), () => `  Signature: ${signature}`);
       } catch (e) {
         handleCliError(e, opts.json as boolean | undefined);
       }

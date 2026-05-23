@@ -3,6 +3,8 @@ import type { Command } from "commander";
 import { registerConfigCommands } from "./core/config.js";
 import { registerLoginCommands } from "./core/login.js";
 import { registerStatusCommands } from "./core/status.js";
+import { registerDoctorCommands } from "./core/doctor.js";
+import { registerBootstrapCommands } from "./core/bootstrap.js";
 
 import { registerAgentCommands } from "./identity/agent.js";
 import { registerPrincipalCommands } from "./identity/principal.js";
@@ -31,6 +33,8 @@ import { registerEventCommands } from "./observability/events.js";
 import { registerSyncCommands } from "./observability/sync.js";
 import { registerTraceCommands } from "./observability/trace.js";
 
+import { registerMemoryCommands } from "./memory/memory.js";
+
 import { registerScenarioCommands } from "./dev/scenarios.js";
 
 /**
@@ -43,6 +47,8 @@ import { registerScenarioCommands } from "./dev/scenarios.js";
 export function registerCommands(program: Command): void {
   registerConfigCommands(program);
   registerStatusCommands(program);
+  registerDoctorCommands(program);
+  registerBootstrapCommands(program);
   registerLoginCommands(program);
 
   registerPrincipalCommands(program);
@@ -75,4 +81,5 @@ export function registerCommands(program: Command): void {
   registerDaemonCommands(program);
 
   registerScenarioCommands(program);
+  registerMemoryCommands(program);
 }
