@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { unwrapEnvelope } from "@vibly/coordinator-http-contract/client";
-import { CoordinatorApiError as ContractApiError } from "@vibly/coordinator-http-contract/errors";
+import { unwrapEnvelope } from "@vibly-ai/coordinator-http-contract/client";
+import { CoordinatorApiError as ContractApiError } from "@vibly-ai/coordinator-http-contract/errors";
 import { createCliContractClient, type ContractCoordinatorClient } from "./contractClient.js";
 import { path } from "./contractPaths.js";
 import { CoordinatorApiError } from "./errors.js";

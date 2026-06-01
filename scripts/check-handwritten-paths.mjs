@@ -2,7 +2,7 @@
 /**
  * Guard: forbid handwritten coordinator paths outside transport adapters.
  *
- * The contract package (@vibly/coordinator-http-contract) is the single
+ * The contract package (@vibly-ai/coordinator-http-contract) is the single
  * source of truth for HTTP paths. Callers should use
  * `this.contract.METHOD("/typed/path", ...)` from coordinator/client.ts.
  */

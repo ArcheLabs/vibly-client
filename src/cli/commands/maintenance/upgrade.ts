@@ -32,7 +32,7 @@ export function registerUpgradeCommands(program: Command): void {
   upgrade
     .command("apply")
     .description("Pause duties, drain work, install the target CLI, verify, then resume duties")
-    .option("--target-version <version>", "Target @vibly/client version")
+    .option("--target-version <version>", "Target @vibly-ai/client version")
     .option("--drain-timeout <ms>", "Drain timeout in milliseconds", "120000")
     .option("--confirm", "Confirm pause/install/resume upgrade flow")
     .option("--json", "Output as JSON")

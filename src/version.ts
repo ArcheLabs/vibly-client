@@ -1,4 +1,4 @@
-export const CLIENT_PACKAGE_NAME = "@vibly/client";
+export const CLIENT_PACKAGE_NAME = "@vibly-ai/client";
 export const CLIENT_VERSION = "0.1.0";
 export const CONTRACT_VERSION = "0.1.0";
 export const PROTOCOL_VERSION = "2026-06-01";

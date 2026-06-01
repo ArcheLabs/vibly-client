@@ -1,5 +1,5 @@
 /**
- * Adapter that builds a `@vibly/coordinator-http-contract` client carrying
+ * Adapter that builds a `@vibly-ai/coordinator-http-contract` client carrying
  * CLI-only transport policy:
  *
  * - Bearer token injected via static headers (per-call headers can override
@@ -12,9 +12,9 @@
  * Path strings, JSON envelope handling, and request/response types come from
  * the contract package; only the fetch layer lives here.
  */
-import { createCoordinatorClient } from "@vibly/coordinator-http-contract/client";
+import { createCoordinatorClient } from "@vibly-ai/coordinator-http-contract/client";
 import { clientVersionHeaders } from "../version.js";
-import type { CoordinatorClient as ContractClient } from "@vibly/coordinator-http-contract/client";
+import type { CoordinatorClient as ContractClient } from "@vibly-ai/coordinator-http-contract/client";
 
 export type ContractCoordinatorClient = ContractClient;
 

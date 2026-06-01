@@ -76,7 +76,7 @@ export function registerDoctorCommands(program: Command): void {
       checks.push({ label: "npm", status: npmV ? "ok" : "error", detail: npmV ?? "not found" });
       const pnpmV = commandVersion("pnpm");
       checks.push({ label: "pnpm", status: pnpmV ? "ok" : "info", detail: pnpmV ?? "not installed (optional)" });
-      checks.push({ label: "client version", status: "ok", detail: `@vibly/client ${CLIENT_VERSION}, contract ${CONTRACT_VERSION}, protocol ${PROTOCOL_VERSION}` });
+      checks.push({ label: "client version", status: "ok", detail: `@vibly-ai/client ${CLIENT_VERSION}, contract ${CONTRACT_VERSION}, protocol ${PROTOCOL_VERSION}` });
 
       // ── VIBLY_HOME directories ──────────────────────────────────────────────
       const home = getViblyhome();

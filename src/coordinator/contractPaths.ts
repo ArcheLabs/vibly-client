@@ -5,7 +5,7 @@
  * methods in `CoordinatorClient` still use the in-house retry/auth
  * machinery against string paths. To prevent path drift, those string
  * paths can be wrapped in `path("/health")` which restricts the literal
- * to keys of `paths` from `@vibly/coordinator-http-contract`.
+ * to keys of `paths` from `@vibly-ai/coordinator-http-contract`.
  *
  * Example:
  *
@@ -16,7 +16,7 @@
  * need to either appear in the contract first, or live behind a
  * documented escape hatch.
  */
-import type { paths } from "@vibly/coordinator-http-contract/types";
+import type { paths } from "@vibly-ai/coordinator-http-contract/types";
 
 export type KnownPath = keyof paths;
 

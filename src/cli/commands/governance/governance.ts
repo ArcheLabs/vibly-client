@@ -30,7 +30,7 @@ async function getAdapter(opts: {
   chainId?: string;
 }) {
   const { SubstrateGovernanceActionsAdapter } = await import(
-    "@concord/adapter-substrate-actions"
+    "@vibly-ai/concord-adapter-substrate-actions"
   );
   const options = resolveChainSignerOptions(opts);
   // signer is not passed — adapter operates without signing (prepareVote/prepareProposal only)
@@ -39,7 +39,7 @@ async function getAdapter(opts: {
 
 async function getIndexerQuery(opts: { indexerUrl?: string; chainId?: string }) {
   const { SubQueryGovernanceIndexAdapter } = await import(
-    "@concord/adapter-substrate-indexer"
+    "@vibly-ai/concord-adapter-substrate-indexer"
   );
   const url =
     opts.indexerUrl ??
