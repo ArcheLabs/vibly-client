@@ -1,5 +1,5 @@
 {
-  "name": "vibly-client",
+  "name": "@vibly/client",
   "version": "0.1.0",
   "description": "Vibly Agent Node CLI and Daemon",
   "type": "module",
@@ -12,15 +12,16 @@
     "start": "node dist/main.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "node scripts/check-handwritten-paths.mjs && tsc --noEmit"
+    "lint": "node scripts/check-handwritten-paths.mjs && tsc --noEmit",
+    "prepack": "pnpm build"
   },
   "dependencies": {
-    "@concord/adapter-substrate-actions": "workspace:*",
-    "@concord/adapter-substrate-indexer": "workspace:*",
+    "@concord/adapter-substrate-actions": "^0.1.0",
+    "@concord/adapter-substrate-indexer": "^0.1.0",
     "@polkadot/api": "^16.5.6",
     "@polkadot/keyring": "^14.0.3",
     "@polkadot/util-crypto": "^14.0.3",
-    "@vibly/coordinator-http-contract": "workspace:*",
+    "@vibly/coordinator-http-contract": "^0.1.0",
     "better-sqlite3": "^9.6.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
@@ -39,5 +40,22 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "license": "MIT",
+  "main": "./dist/main.js",
+  "types": "./dist/main.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "default": "./dist/main.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }

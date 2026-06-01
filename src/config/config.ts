@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ClientConfig } from "../domain/clientTypes.js";
 import { getConfigPath } from "./paths.js";
@@ -34,7 +34,8 @@ export function loadConfig(configPath?: string): ClientConfig {
 export function saveConfig(config: ClientConfig, configPath?: string): void {
   const p = configPath ?? getConfigPath();
   mkdirSync(dirname(p), { recursive: true });
-  writeFileSync(p, JSON.stringify(config, null, 2) + "\n");
+  writeFileSync(p, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
+  chmodSync(p, 0o600);
 }
 
 export function initConfig(configPath?: string): ClientConfig {

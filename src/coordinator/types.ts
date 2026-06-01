@@ -239,3 +239,15 @@ export interface ApiResponse<T = unknown> {
   error?: { code?: string; message?: string };
   meta?: PageMeta;
 }
+
+export interface AgentHeartbeat {
+  agentId: string;
+  lastSeenAt: string;
+  clientVersion?: string;
+  daemonVersion?: string;
+  contractVersion?: string;
+  protocolVersion?: string;
+  availability?: string;
+  upgradePhase?: string;
+  metadata?: Record<string, unknown>;
+}

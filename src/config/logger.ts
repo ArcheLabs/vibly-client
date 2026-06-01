@@ -1,7 +1,7 @@
 import pino from "pino";
 import type { Logger } from "pino";
 import { getClientLogPath } from "./paths.js";
-import { mkdirSync } from "node:fs";
+import { createWriteStream, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 let _logger: Logger | null = null;
@@ -15,13 +15,29 @@ export function createLogger(level?: string, json?: boolean): Logger {
     // ignore
   }
 
+  const redact = [
+    "token",
+    "apiToken",
+    "authorization",
+    "headers.authorization",
+    "signerUri",
+    "mnemonic",
+    "sessionKey",
+    "session.key",
+    "password",
+    "secret",
+  ];
+  const base = { level: logLevel, redact };
+  const fileStream = createWriteStream(logPath, { flags: "a", mode: 0o600 });
+
   if (json) {
-    return pino({ level: logLevel });
+    return pino(base, fileStream);
   }
 
   return pino(
-    { level: logLevel },
+    base,
     pino.multistream([
+      { stream: fileStream },
       {
         stream: pino.transport({
           target: "pino-pretty",

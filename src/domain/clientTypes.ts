@@ -166,7 +166,13 @@ export interface ClientProfile {
   principalId?: string;
   agentId?: string;
   projectId?: string;
+  organizationId?: string;
   defaultRuntimeBindingId?: string;
+  wallet?: {
+    publicAddress?: string;
+    chain?: string;
+    setAt?: string;
+  };
   apiTokenRef?: string;
   sync?: {
     enableSse?: boolean;
@@ -186,6 +192,40 @@ export interface ClientProfile {
     deniedWorkTypes?: string[];
     requireManualApprovalForRisk?: RiskLevel[];
   };
+}
+
+export interface VersionPolicy {
+  minimumClientVersion: string;
+  recommendedClientVersion: string;
+  minimumContractVersion: string;
+  upgradeDeadline?: string;
+  upgradeInstructionsUrl: string;
+  protocolVersion: string;
+  enforcement: boolean;
+}
+
+export type UpgradePhase =
+  | "idle"
+  | "check"
+  | "pause-chain"
+  | "drain"
+  | "install"
+  | "restart"
+  | "verify"
+  | "resume-chain"
+  | "complete"
+  | "maintenance"
+  | "failed";
+
+export interface UpgradeState {
+  currentVersion: string;
+  targetVersion?: string;
+  phase: UpgradePhase;
+  pausedAt?: string;
+  drainedAt?: string;
+  upgradedAt?: string;
+  rollbackReason?: string;
+  updatedAt: string;
 }
 
 /** Local config.json shape */

@@ -43,6 +43,14 @@ export function getClientLogPath(): string {
   return join(getViblyhome(), "client.log");
 }
 
+export function getDaemonPidPath(): string {
+  return join(getViblyhome(), "daemon.pid");
+}
+
+export function getUpgradeStatePath(): string {
+  return join(getViblyhome(), "upgrade-state.json");
+}
+
 export function getTracesDir(): string {
   return join(getViblyhome(), "traces");
 }

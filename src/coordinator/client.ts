@@ -4,6 +4,7 @@ import { CoordinatorApiError as ContractApiError } from "@vibly/coordinator-http
 import { createCliContractClient, type ContractCoordinatorClient } from "./contractClient.js";
 import { path } from "./contractPaths.js";
 import { CoordinatorApiError } from "./errors.js";
+import { clientVersionHeaders } from "../version.js";
 import type {
   ActionIntentInput,
   ActionIntentReceipt,
@@ -11,6 +12,7 @@ import type {
   MechanismSnapshot,
   OrganizationSnapshot,
   ProjectHandbookSnapshot,
+  VersionPolicy,
 } from "../domain/clientTypes.js";
 import type {
   Agent,
@@ -32,6 +34,7 @@ import type {
   Submission,
   WorkClaim,
   WorkOrder,
+  AgentHeartbeat,
 } from "./types.js";
 
 type ContractResult = { response: Response; data?: unknown; error?: unknown };
@@ -51,6 +54,7 @@ export class CoordinatorClient {
   private readonly token: string;
   private readonly maxRetries: number;
   private readonly retryBaseMs: number;
+  private readonly networkId?: string;
   private readonly contract: ContractCoordinatorClient;
 
   constructor(opts: CoordinatorClientOptions) {
@@ -58,6 +62,7 @@ export class CoordinatorClient {
     this.token = opts.token;
     this.maxRetries = opts.maxRetries ?? 2;
     this.retryBaseMs = opts.retryBaseMs ?? 500;
+    this.networkId = opts.networkId;
     this.contract = createCliContractClient({
       baseUrl: this.baseUrl,
       token: this.token,
@@ -76,6 +81,15 @@ export class CoordinatorClient {
       return unwrapEnvelope<HealthResponse>(result.data);
     });
   }
+
+  async getVersionPolicy(): Promise<VersionPolicy> {
+    return runContract(async () => {
+      const result = await (this.contract.GET as never as (path: string) => Promise<ContractResult>)("/version-policy");
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<VersionPolicy>(unwrapEnvelope(result.data), "policy");
+    });
+  }
+
 
   // ── Principals ──────────────────────────────────────────────────────────────
 
@@ -724,11 +738,10 @@ export class CoordinatorClient {
     return runContract(async () => {
       const result = await fetch(`${this.baseUrl}/action-intents`, {
         method: "POST",
-        headers: {
+        headers: this.requestHeaders({
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.token}`,
           "Idempotency-Key": intent.idempotencyKey ?? randomUUID(),
-        },
+        }),
         body: JSON.stringify(intent),
       });
       if (!result.ok) {
@@ -745,7 +758,7 @@ export class CoordinatorClient {
     return runContract(async () => {
       const result = await fetch(
         `${this.baseUrl}/agents/${encodeURIComponent(principalId)}/inbox?${new URLSearchParams(queryFromInput(query))}`,
-        { headers: { Authorization: `Bearer ${this.token}` } },
+        { headers: this.requestHeaders() },
       );
       if (!result.ok) {
         const text = await result.text().catch(() => "");
@@ -763,7 +776,7 @@ export class CoordinatorClient {
     try {
       const result = await fetch(
         `${this.baseUrl}/organizations?${new URLSearchParams(queryFromInput(query))}`,
-        { headers: { Authorization: `Bearer ${this.token}` } },
+        { headers: this.requestHeaders() },
       );
       if (!result.ok) return { items: [] };
       const json = (await result.json()) as unknown;
@@ -777,7 +790,7 @@ export class CoordinatorClient {
   async getOrganization(id: string): Promise<OrganizationSnapshot | null> {
     try {
       const result = await fetch(`${this.baseUrl}/organizations/${encodeURIComponent(id)}`, {
-        headers: { Authorization: `Bearer ${this.token}` },
+        headers: this.requestHeaders(),
       });
       if (!result.ok) return null;
       const json = (await result.json()) as unknown;
@@ -793,7 +806,7 @@ export class CoordinatorClient {
     try {
       const result = await fetch(
         `${this.baseUrl}/projects/${encodeURIComponent(projectId)}/handbook`,
-        { headers: { Authorization: `Bearer ${this.token}` } },
+        { headers: this.requestHeaders() },
       );
       if (!result.ok) return null;
       const json = (await result.json()) as unknown;
@@ -811,7 +824,7 @@ export class CoordinatorClient {
     try {
       const result = await fetch(
         `${this.baseUrl}/mechanisms?${new URLSearchParams(queryFromInput(query))}`,
-        { headers: { Authorization: `Bearer ${this.token}` } },
+        { headers: this.requestHeaders() },
       );
       if (!result.ok) return { items: [] };
       const json = (await result.json()) as unknown;
@@ -847,7 +860,7 @@ export class CoordinatorClient {
   async getTask(taskId: string): Promise<unknown> {
     return runContract(async () => {
       const result = await fetch(`${this.baseUrl}/tasks/${encodeURIComponent(taskId)}`, {
-        headers: { Authorization: `Bearer ${this.token}` },
+        headers: this.requestHeaders(),
       });
       if (!result.ok) throw new CoordinatorApiError(result.status, `Failed to fetch task ${taskId}`);
       const json = (await result.json()) as unknown;
@@ -882,7 +895,7 @@ export class CoordinatorClient {
     try {
       const result = await fetch(
         `${this.baseUrl}${endpoint}?${new URLSearchParams(queryFromInput(query))}`,
-        { headers: { Authorization: `Bearer ${this.token}` } },
+        { headers: this.requestHeaders() },
       );
       if (!result.ok) return { items: [] };
       const json = (await result.json()) as unknown;
@@ -891,6 +904,45 @@ export class CoordinatorClient {
     } catch {
       return { items: [] };
     }
+  }
+
+  async getJoinEligibility(organizationId: string, principalId: string): Promise<unknown> {
+    return runContract(async () => {
+      const result = await (this.contract.GET as never as (path: string, init: unknown) => Promise<ContractResult>)(
+        "/organizations/{organizationId}/agents/{principalId}/join-eligibility",
+        { params: { path: { organizationId, principalId } } },
+      );
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<unknown>(unwrapEnvelope(result.data), "eligibility");
+    });
+  }
+
+  async sendAgentHeartbeat(agentId: string, body: {
+    clientVersion?: string;
+    daemonVersion?: string;
+    contractVersion?: string;
+    protocolVersion?: string;
+    availability?: string;
+    upgradePhase?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<AgentHeartbeat> {
+    return runContract(async () => {
+      const result = await (this.contract.POST as never as (path: string, init: unknown) => Promise<ContractResult>)(
+        "/agents/{id}/heartbeat",
+        { params: { path: { id: agentId } }, body: body as never, headers: idempotencyHeaders() },
+      );
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<AgentHeartbeat>(unwrapEnvelope(result.data), "heartbeat");
+    });
+  }
+
+  private requestHeaders(extra?: Record<string, string>): Record<string, string> {
+    return {
+      Authorization: `Bearer ${this.token}`,
+      ...clientVersionHeaders(),
+      ...(this.networkId ? { "X-Vibly-Network-Id": this.networkId } : {}),
+      ...(extra ?? {}),
+    };
   }
 
   /** Base URL for SSE stream */

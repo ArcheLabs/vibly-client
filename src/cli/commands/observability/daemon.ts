@@ -1,7 +1,9 @@
 import type { Command } from "commander";
-import { loadConfig } from "../../../config/config.js";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { loadActiveProfile } from "../../../config/profiles.js";
+import { getClientLogPath, getDaemonPidPath } from "../../../config/paths.js";
 import { outputOk, printOutput } from "../../../domain/apiTypes.js";
+import { loadUpgradeState } from "../../../upgrade/state.js";
 
 export function registerDaemonCommands(program: Command): void {
   const daemon = program.command("daemon").description("Run the automation daemon");
@@ -29,12 +31,53 @@ export function registerDaemonCommands(program: Command): void {
     });
 
   daemon
+    .command("stop")
+    .description("Stop a foreground/background daemon by pid file")
+    .option("--json", "Output as JSON")
+    .action((opts) => {
+      const pidPath = getDaemonPidPath();
+      const pid = readPid(pidPath);
+      if (!pid) {
+        printOutput(outputOk({ running: false, pidPath }), Boolean(opts.json), () => "Daemon is not running");
+        return;
+      }
+      process.kill(pid, "SIGTERM");
+      rmSync(pidPath, { force: true });
+      printOutput(outputOk({ stopped: true, pid, pidPath }), Boolean(opts.json), () => `Stopped daemon pid ${pid}`);
+    });
+
+  daemon
     .command("status")
-    .description("Show daemon configuration for active profile")
+    .description("Show daemon status for active profile")
     .option("--json", "Output as JSON")
     .action((opts) => {
       const { profile } = loadActiveProfile();
-      const daemonCfg = profile.daemon ?? {};
-      printOutput(outputOk(daemonCfg), Boolean(opts.json), (d) => JSON.stringify(d, null, 2));
+      const pidPath = getDaemonPidPath();
+      const pid = readPid(pidPath);
+      const data = {
+        running: pid ? isProcessAlive(pid) : false,
+        pid,
+        pidPath,
+        logPath: getClientLogPath(),
+        profile: profile.name,
+        daemon: profile.daemon ?? {},
+        upgrade: loadUpgradeState(),
+      };
+      printOutput(outputOk(data), Boolean(opts.json), (d) => JSON.stringify(d, null, 2));
     });
+}
+
+function readPid(path: string): number | undefined {
+  if (!existsSync(path)) return undefined;
+  const pid = Number.parseInt(readFileSync(path, "utf8"), 10);
+  return Number.isFinite(pid) ? pid : undefined;
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }

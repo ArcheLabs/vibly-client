@@ -29,11 +29,13 @@ import { registerNegotiationCommands } from "./governance/negotiation.js";
 import { registerVotingCommands } from "./governance/voting.js";
 
 import { registerDaemonCommands } from "./observability/daemon.js";
+import { registerLogsCommands } from "./observability/logs.js";
 import { registerEventCommands } from "./observability/events.js";
 import { registerSyncCommands } from "./observability/sync.js";
 import { registerTraceCommands } from "./observability/trace.js";
 
 import { registerMemoryCommands } from "./memory/memory.js";
+import { registerUpgradeCommands } from "./maintenance/upgrade.js";
 
 import { registerScenarioCommands } from "./dev/scenarios.js";
 
@@ -79,7 +81,9 @@ export function registerCommands(program: Command): void {
   registerTraceCommands(program);
   registerSyncCommands(program);
   registerDaemonCommands(program);
+  registerLogsCommands(program);
 
   registerScenarioCommands(program);
   registerMemoryCommands(program);
+  registerUpgradeCommands(program);
 }

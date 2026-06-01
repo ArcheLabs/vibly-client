@@ -1,10 +1,14 @@
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { CoordinatorClient } from "../coordinator/client.js";
 import { assertProfileNetworkState, getNetworkProfile, loadActiveProfile, requireApiToken } from "../config/profiles.js";
-import { setLogger, createLogger } from "../config/logger.js";
+import { setLogger, createLogger, getLogger } from "../config/logger.js";
 import { DaemonConfigSchema } from "../schemas/daemon.js";
 import { subscribeSse } from "../coordinator/sse.js";
 import { runLoop } from "./loop.js";
 import type { DaemonConfig } from "../schemas/daemon.js";
+import { getDaemonPidPath } from "../config/paths.js";
+import { CLIENT_VERSION, CONTRACT_VERSION, PROTOCOL_VERSION } from "../version.js";
+import { loadUpgradeState } from "../upgrade/state.js";
 
 export interface DaemonStartOptions {
   once?: boolean;
@@ -15,6 +19,7 @@ export interface DaemonStartOptions {
 export async function startDaemon(opts: DaemonStartOptions = {}): Promise<void> {
   const log = createLogger(opts.verbose ? "debug" : "info");
   setLogger(log);
+  claimDaemonLock();
 
   const { config: _config, profile } = loadActiveProfile();
   assertProfileNetworkState(profile);
@@ -32,7 +37,10 @@ export async function startDaemon(opts: DaemonStartOptions = {}): Promise<void> 
 
   if (opts.once) {
     log.info("daemon: running single iteration");
+    await sendHeartbeat(client, profile, "starting");
     await runLoop(client, profile, daemonConfig);
+    await sendHeartbeat(client, profile, "available");
+    releaseDaemonLock();
     log.info("daemon: done");
     return;
   }
@@ -49,6 +57,7 @@ export async function startDaemon(opts: DaemonStartOptions = {}): Promise<void> 
     try {
       do {
         rerunRequested = false;
+        await sendHeartbeat(client, profile, "available");
         await runLoop(client, profile, daemonConfig);
       } while (rerunRequested);
     } catch (e) {
@@ -87,11 +96,60 @@ export async function startDaemon(opts: DaemonStartOptions = {}): Promise<void> 
     const stop = () => {
       clearInterval(timer);
       sseController.abort();
-      resolve();
+      void sendHeartbeat(client, profile, "offline").finally(() => {
+        releaseDaemonLock();
+        resolve();
+      });
     };
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
   });
 
   log.info("daemon: stopped");
+}
+
+
+function claimDaemonLock(): void {
+  const pidPath = getDaemonPidPath();
+  if (existsSync(pidPath)) {
+    const pid = Number.parseInt(readFileSync(pidPath, "utf8"), 10);
+    if (Number.isFinite(pid) && isProcessAlive(pid)) {
+      throw new Error(`daemon already running with pid ${pid}`);
+    }
+  }
+  writeFileSync(pidPath, `${process.pid}\n`, { mode: 0o600 });
+}
+
+function releaseDaemonLock(): void {
+  try {
+    rmSync(getDaemonPidPath(), { force: true });
+  } catch {
+    // ignore cleanup failures during shutdown
+  }
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function sendHeartbeat(client: CoordinatorClient, profile: { agentId?: string }, availability: string): Promise<void> {
+  if (!profile.agentId) return;
+  const upgrade = loadUpgradeState();
+  try {
+    await client.sendAgentHeartbeat(profile.agentId, {
+      clientVersion: CLIENT_VERSION,
+      daemonVersion: CLIENT_VERSION,
+      contractVersion: CONTRACT_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
+      availability,
+      upgradePhase: upgrade.phase,
+    });
+  } catch (e) {
+    getLogger().warn({ err: String(e) }, "daemon: heartbeat failed");
+  }
 }

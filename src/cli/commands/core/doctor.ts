@@ -13,6 +13,7 @@ import {
   getDatabasePath,
 } from "../../../config/paths.js";
 import { CoordinatorClient } from "../../../coordinator/client.js";
+import { CLIENT_VERSION, CONTRACT_VERSION, PROTOCOL_VERSION } from "../../../version.js";
 
 interface CheckResult {
   label: string;
@@ -43,7 +44,7 @@ function commandVersion(cmd: string, args: string[] = ["--version"]): string | n
 function checkNodeVersion(): Omit<CheckResult, "label"> {
   const v = process.versions.node;
   const [major] = v.split(".").map(Number);
-  if ((major ?? 0) < 18) return { status: "error", detail: `Node.js ${v} — requires >=18` };
+  if ((major ?? 0) < 20) return { status: "error", detail: `Node.js ${v} — requires >=20` };
   return { status: "ok", detail: `Node.js ${v}` };
 }
 
@@ -59,6 +60,8 @@ export function registerDoctorCommands(program: Command): void {
     .command("doctor")
     .description("Check environment prerequisites and local setup")
     .option("--json", "Output results as JSON")
+    .option("--offline", "Skip coordinator/network checks")
+    .option("--post-upgrade", "Run post-upgrade verification checks")
     .action(async (opts) => {
       const json = Boolean(opts.json);
       const checks: CheckResult[] = [];
@@ -69,6 +72,11 @@ export function registerDoctorCommands(program: Command): void {
 
       const gitV = commandVersion("git");
       checks.push({ label: "git", status: gitV ? "ok" : "warn", detail: gitV ?? "not found" });
+      const npmV = commandVersion("npm");
+      checks.push({ label: "npm", status: npmV ? "ok" : "error", detail: npmV ?? "not found" });
+      const pnpmV = commandVersion("pnpm");
+      checks.push({ label: "pnpm", status: pnpmV ? "ok" : "info", detail: pnpmV ?? "not installed (optional)" });
+      checks.push({ label: "client version", status: "ok", detail: `@vibly/client ${CLIENT_VERSION}, contract ${CONTRACT_VERSION}, protocol ${PROTOCOL_VERSION}` });
 
       // ── VIBLY_HOME directories ──────────────────────────────────────────────
       const home = getViblyhome();
@@ -84,22 +92,31 @@ export function registerDoctorCommands(program: Command): void {
       checks.push({ label: "config file", status: existsSync(cfgPath) ? "ok" : "warn", detail: cfgPath });
 
       // ── Profile & coordinator connectivity ──────────────────────────────────
-      let coordinatorCheck: CheckResult;
-      try {
-        const config = loadConfig();
-        const profile = getActiveProfile(config);
-        if (!profile.coordinatorUrl) throw new Error("coordinatorUrl not set in active profile");
-        const client = new CoordinatorClient({ baseUrl: profile.coordinatorUrl, token: getApiToken(profile) ?? "" });
-        const health = await client.health();
-        coordinatorCheck = {
-          label: "coordinator",
-          status: "ok",
-          detail: `${profile.coordinatorUrl} — v${health.version ?? "?"}`,
-        };
-      } catch (e) {
-        coordinatorCheck = { label: "coordinator", status: "error", detail: String(e) };
+      if (!opts.offline) {
+        let coordinatorCheck: CheckResult;
+        try {
+          const config = loadConfig();
+          const profile = getActiveProfile(config);
+          if (!profile.coordinatorUrl) throw new Error("coordinatorUrl not set in active profile");
+          const client = new CoordinatorClient({ baseUrl: profile.coordinatorUrl, token: getApiToken(profile) ?? "", networkId: profile.network?.id });
+          const [health, policy] = await Promise.all([client.health(), client.getVersionPolicy()]);
+          coordinatorCheck = {
+            label: "coordinator",
+            status: "ok",
+            detail: `${profile.coordinatorUrl} — v${health.version ?? "?"}`,
+          };
+          checks.push({
+            label: "version policy",
+            status: CLIENT_VERSION < policy.minimumClientVersion ? "error" : "ok",
+            detail: `min=${policy.minimumClientVersion} recommended=${policy.recommendedClientVersion} contractMin=${policy.minimumContractVersion}`,
+          });
+        } catch (e) {
+          coordinatorCheck = { label: "coordinator", status: "error", detail: String(e) };
+        }
+        checks.push(coordinatorCheck);
+      } else {
+        checks.push({ label: "coordinator", status: "info", detail: "skipped (--offline)" });
       }
-      checks.push(coordinatorCheck);
 
       // ── Executor runtimes (optional) ────────────────────────────────────────
       for (const bin of ["codex", "claude"]) {

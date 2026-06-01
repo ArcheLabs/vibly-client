@@ -13,6 +13,7 @@
  * the contract package; only the fetch layer lives here.
  */
 import { createCoordinatorClient } from "@vibly/coordinator-http-contract/client";
+import { clientVersionHeaders } from "../version.js";
 import type { CoordinatorClient as ContractClient } from "@vibly/coordinator-http-contract/client";
 
 export type ContractCoordinatorClient = ContractClient;
@@ -59,6 +60,7 @@ export function createCliContractClient(opts: CliContractOptions): ContractCoord
     fetch: cliFetch,
     headers: {
       Authorization: `Bearer ${opts.token}`,
+      ...clientVersionHeaders(),
       ...(opts.networkId ? { "X-Vibly-Network-Id": opts.networkId } : {}),
     },
   });

@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { loadActiveProfile, requirePrincipalId, requireAgentId } from "../../../config/profiles.js";
 import { saveConfig } from "../../../config/config.js";
 import { outputOk, printOutput } from "../../../domain/apiTypes.js";
+import { CLIENT_VERSION, CONTRACT_VERSION, PROTOCOL_VERSION } from "../../../version.js";
 import { getCoordinatorClient } from "../shared/client.js";
 import { handleCliError } from "../shared/errors.js";
 import { submitAgentStakeTx } from "../../../chain/agentStaking.js";
@@ -70,9 +71,95 @@ export function registerAgentCommands(program: Command): void {
       }
     });
 
+  const wallet = agent.command("wallet").description("Manage the local public wallet binding");
+
+  wallet
+    .command("set")
+    .description("Store the public wallet address used for root authorization")
+    .argument("<public-address>", "Public wallet address; private keys are never stored")
+    .option("--chain <chain>", "Wallet chain", "substrate")
+    .option("--json", "Output as JSON")
+    .action((address: string, opts) => {
+      try {
+        if (!isLikelyPublicAddress(address)) throw new Error("Invalid public address format");
+        const { config, profile } = loadActiveProfile();
+        profile.wallet = { publicAddress: address, chain: opts.chain as string, setAt: new Date().toISOString() };
+        config.profiles[profile.name] = profile;
+        saveConfig(config);
+        printOutput(outputOk({ wallet: profile.wallet }), Boolean(opts.json), () => `Wallet address saved for profile '${profile.name}'`);
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
+
   agent
-    .command("availability")
-    .description("Change agent availability status")
+    .command("status")
+    .description("Show local, coordinator, stake, join, version, and daemon readiness for the active agent")
+    .option("--organization <id>", "Organization ID for join eligibility")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const { client, profile } = getCoordinatorClient();
+        const principalId = profile.principalId;
+        const agentId = profile.agentId;
+        const organizationId = (opts.organization as string | undefined) ?? profile.organizationId;
+        const [versionPolicy, agentRecord, stakes, eligibility] = await Promise.all([
+          client.getVersionPolicy().catch((error) => ({ error: String(error) })),
+          agentId ? client.getAgent(agentId).catch((error) => ({ error: String(error) })) : Promise.resolve(undefined),
+          client.listAgentStakes({ principalId, limit: 20 }).catch((error) => ({ error: String(error), items: [] })),
+          organizationId && principalId ? client.getJoinEligibility(organizationId, principalId).catch((error) => ({ error: String(error) })) : Promise.resolve(undefined),
+        ]);
+        const status = {
+          profile: profile.name,
+          principalId,
+          agentId,
+          organizationId,
+          wallet: profile.wallet?.publicAddress ? { ...profile.wallet, publicAddress: maskAddress(profile.wallet.publicAddress) } : undefined,
+          version: { clientVersion: CLIENT_VERSION, contractVersion: CONTRACT_VERSION, protocolVersion: PROTOCOL_VERSION, policy: versionPolicy },
+          agent: agentRecord,
+          stakes,
+          joinEligibility: eligibility,
+        };
+        printOutput(outputOk(status), Boolean(opts.json), (d) => JSON.stringify(d, null, 2));
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
+
+  agent
+    .command("join")
+    .description("Join an organization after identity and stake eligibility pass")
+    .requiredOption("--organization <id>", "Organization ID")
+    .option("--confirm", "Submit the join action intent")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        if (!opts.confirm) throw new Error("agent join requires --confirm after reviewing eligibility");
+        const { client, config, profile } = getCoordinatorClient();
+        const principalId = requirePrincipalId(profile);
+        const organizationId = opts.organization as string;
+        const eligibility = await client.getJoinEligibility(organizationId, principalId);
+        const receipt = await client.submitActionIntent({
+          type: "JoinOrganizationAgent",
+          principalId,
+          organizationId,
+          payload: { organizationId, principalId },
+          idempotencyKey: randomUUID(),
+        });
+        profile.organizationId = organizationId;
+        config.profiles[profile.name] = profile;
+        saveConfig(config);
+        printOutput(outputOk({ eligibility, receipt }), Boolean(opts.json), () => `Join submitted for organization ${organizationId} (eventId: ${receipt.eventId})`);
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
+
+  const availability = agent.command("availability").description("Manage agent availability and duty eligibility");
+
+  availability
+    .command("set")
+    .description("Change coordinator-visible agent availability status")
     .argument("<status>", "New status (available|busy|offline)")
     .option("--reason <reason>", "Reason for status change")
     .option("--json", "Output as JSON")
@@ -84,52 +171,37 @@ export function registerAgentCommands(program: Command): void {
           nextStatus: status,
           reason: opts.reason as string | undefined,
         });
-        printOutput(outputOk(a), Boolean(opts.json), () => `Agent status updated to '${ status }'`);
+        printOutput(outputOk(a), Boolean(opts.json), () => `Agent status updated to '${status}'`);
       } catch (e) {
         handleCliError(e, opts.json as boolean | undefined);
       }
     });
+
+  availability
+    .command("pause")
+    .description("Pause public-duty eligibility before maintenance or upgrade")
+    .option("--reason <reason>", "Reason for pausing public duties")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => pausePublicDuties(opts));
+
+  availability
+    .command("resume")
+    .description("Resume public-duty eligibility after maintenance or upgrade")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => resumePublicDuties(opts));
 
   agent
     .command("pause")
     .description("Pause public-duty eligibility for the current agent")
     .option("--reason <reason>", "Reason for pausing public duties")
     .option("--json", "Output as JSON")
-    .action(async (opts) => {
-      try {
-        const { client, profile } = getCoordinatorClient();
-        const principalId = requirePrincipalId(profile);
-        const receipt = await client.submitActionIntent({
-          type: "RequestAgentDutyPause",
-          principalId,
-          payload: { principalId, reason: opts.reason as string | undefined },
-          idempotencyKey: randomUUID(),
-        });
-        printOutput(outputOk(receipt), Boolean(opts.json), () => `Agent public duties paused (eventId: ${receipt.eventId})`);
-      } catch (e) {
-        handleCliError(e, opts.json as boolean | undefined);
-      }
-    });
+    .action(async (opts) => pausePublicDuties(opts));
 
   agent
     .command("resume")
     .description("Resume public-duty eligibility for the current agent")
     .option("--json", "Output as JSON")
-    .action(async (opts) => {
-      try {
-        const { client, profile } = getCoordinatorClient();
-        const principalId = requirePrincipalId(profile);
-        const receipt = await client.submitActionIntent({
-          type: "ResumeAgentDuty",
-          principalId,
-          payload: { principalId },
-          idempotencyKey: randomUUID(),
-        });
-        printOutput(outputOk(receipt), Boolean(opts.json), () => `Agent public duties resumed (eventId: ${receipt.eventId})`);
-      } catch (e) {
-        handleCliError(e, opts.json as boolean | undefined);
-      }
-    });
+    .action(async (opts) => resumePublicDuties(opts));
 
   registerAgentDescriptorCommands(agent);
 
@@ -175,6 +247,9 @@ export function registerAgentCommands(program: Command): void {
     .option("--rpc-url <url>", "Substrate WebSocket RPC URL")
     .option("--signer-uri <uri>", "Signer URI; root or authorized agent/operator")
     .option("--chain-id <id>", "Chain ID")
+    .option("--dry-run", "Preview without submitting a chain transaction")
+    .option("--confirm", "Submit the chain transaction")
+    .option("--unsafe-dev-signer", "Allow dev signer URI such as //Alice")
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       await runStakeTx("bond", opts);
@@ -189,6 +264,9 @@ export function registerAgentCommands(program: Command): void {
     .option("--rpc-url <url>", "Substrate WebSocket RPC URL")
     .option("--signer-uri <uri>", "Signer URI; root or authorized agent/operator")
     .option("--chain-id <id>", "Chain ID")
+    .option("--dry-run", "Preview without submitting a chain transaction")
+    .option("--confirm", "Submit the chain transaction")
+    .option("--unsafe-dev-signer", "Allow dev signer URI such as //Alice")
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       await runStakeTx("request-unbond", opts);
@@ -202,6 +280,9 @@ export function registerAgentCommands(program: Command): void {
     .option("--rpc-url <url>", "Substrate WebSocket RPC URL")
     .option("--signer-uri <uri>", "Signer URI; root or authorized agent/operator")
     .option("--chain-id <id>", "Chain ID")
+    .option("--dry-run", "Preview without submitting a chain transaction")
+    .option("--confirm", "Submit the chain transaction")
+    .option("--unsafe-dev-signer", "Allow dev signer URI such as //Alice")
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       await runStakeTx("cancel-unbond", opts);
@@ -215,6 +296,9 @@ export function registerAgentCommands(program: Command): void {
     .option("--rpc-url <url>", "Substrate WebSocket RPC URL")
     .option("--signer-uri <uri>", "Signer URI; root or authorized agent/operator")
     .option("--chain-id <id>", "Chain ID")
+    .option("--dry-run", "Preview without submitting a chain transaction")
+    .option("--confirm", "Submit the chain transaction")
+    .option("--unsafe-dev-signer", "Allow dev signer URI such as //Alice")
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       await runStakeTx("release-unbond", opts);
@@ -322,6 +406,23 @@ function registerAgentDescriptorCommands(agent: Command): void {
 async function runStakeTx(kind: "bond" | "request-unbond" | "cancel-unbond" | "release-unbond", opts: Record<string, unknown>): Promise<void> {
   try {
     const agentId = (opts["agentId"] as string | undefined) ?? requireAgentId(loadActiveProfile().profile);
+    const plan = {
+      kind,
+      identityId: opts["identityId"] as string,
+      agentId,
+      amount: opts["amount"] as string | undefined,
+      rpcUrl: opts["rpcUrl"] as string | undefined,
+      chainId: opts["chainId"] as string | undefined,
+    };
+    if (opts["dryRun"]) {
+      printOutput(outputOk({ dryRun: true, plan }), Boolean(opts["json"]), () => JSON.stringify({ dryRun: true, plan }, null, 2));
+      return;
+    }
+    if (!opts["confirm"]) throw new Error(`${kind} requires --confirm; use --dry-run to preview the transaction`);
+    const signerUri = opts["signerUri"] as string | undefined;
+    if (signerUri?.startsWith("//") && !opts["unsafeDevSigner"]) {
+      throw new Error("Dev signer URIs require --unsafe-dev-signer");
+    }
     const receipt = await submitAgentStakeTx({
       kind,
       identityId: opts["identityId"] as string,
@@ -329,7 +430,7 @@ async function runStakeTx(kind: "bond" | "request-unbond" | "cancel-unbond" | "r
       amount: opts["amount"] as string | undefined,
       signer: {
         rpcUrl: opts["rpcUrl"] as string | undefined,
-        signerUri: opts["signerUri"] as string | undefined,
+        signerUri,
         chainId: opts["chainId"] as string | undefined,
       },
     });
@@ -339,9 +440,50 @@ async function runStakeTx(kind: "bond" | "request-unbond" | "cancel-unbond" | "r
   }
 }
 
+async function pausePublicDuties(opts: Record<string, unknown>): Promise<void> {
+  try {
+    const { client, profile } = getCoordinatorClient();
+    const principalId = requirePrincipalId(profile);
+    const receipt = await client.submitActionIntent({
+      type: "RequestAgentDutyPause",
+      principalId,
+      payload: { principalId, reason: opts["reason"] as string | undefined },
+      idempotencyKey: randomUUID(),
+    });
+    printOutput(outputOk(receipt), Boolean(opts["json"]), () => `Agent public duties paused (eventId: ${receipt.eventId})`);
+  } catch (e) {
+    handleCliError(e, opts["json"] as boolean | undefined);
+  }
+}
+
+async function resumePublicDuties(opts: Record<string, unknown>): Promise<void> {
+  try {
+    const { client, profile } = getCoordinatorClient();
+    const principalId = requirePrincipalId(profile);
+    const receipt = await client.submitActionIntent({
+      type: "ResumeAgentDuty",
+      principalId,
+      payload: { principalId },
+      idempotencyKey: randomUUID(),
+    });
+    printOutput(outputOk(receipt), Boolean(opts["json"]), () => `Agent public duties resumed (eventId: ${receipt.eventId})`);
+  } catch (e) {
+    handleCliError(e, opts["json"] as boolean | undefined);
+  }
+}
+
 function splitCsv(value: string | undefined, fallback: string[] = []): string[] {
   if (!value) return fallback;
   return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function isLikelyPublicAddress(value: string): boolean {
+  return /^0x[0-9a-fA-F]{40,128}$/.test(value) || /^[1-9A-HJ-NP-Za-km-z]{32,64}$/.test(value);
+}
+
+function maskAddress(value: string): string {
+  if (value.length <= 12) return value;
+  return `${value.slice(0, 6)}...${value.slice(-6)}`;
 }
 
 function dynamicImport(specifier: string): Promise<Record<string, unknown>> {

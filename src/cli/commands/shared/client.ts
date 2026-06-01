@@ -1,5 +1,5 @@
 import { CoordinatorClient } from "../../../coordinator/client.js";
-import { loadActiveProfile, requireApiToken } from "../../../config/profiles.js";
+import { getNetworkProfile, loadActiveProfile, requireApiToken } from "../../../config/profiles.js";
 import type { ClientConfig, ClientProfile } from "../../../domain/clientTypes.js";
 
 export interface CliCoordinatorContext {
@@ -16,6 +16,7 @@ export interface CliCoordinatorContext {
 export function getCoordinatorClient(): CliCoordinatorContext {
   const { config, profile } = loadActiveProfile();
   const token = requireApiToken(profile);
-  const client = new CoordinatorClient({ baseUrl: profile.coordinatorUrl, token });
+  const network = getNetworkProfile(profile);
+  const client = new CoordinatorClient({ baseUrl: network.coordinatorUrl, token, networkId: network.id });
   return { client, config, profile };
 }
