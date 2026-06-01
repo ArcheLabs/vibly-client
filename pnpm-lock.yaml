@@ -8,12 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@vibly-ai/concord-adapter-substrate-actions':
-        specifier: workspace:*
-        version: link:../concord/packages/adapter-substrate-actions
-      '@vibly-ai/concord-adapter-substrate-indexer':
-        specifier: workspace:*
-        version: link:../concord/packages/adapter-substrate-indexer
       '@polkadot/api':
         specifier: ^16.5.6
         version: 16.5.6
@@ -23,9 +17,15 @@ importers:
       '@polkadot/util-crypto':
         specifier: ^14.0.3
         version: 14.0.3(@polkadot/util@14.0.3)
+      '@vibly-ai/concord-adapter-substrate-actions':
+        specifier: ^0.1.0
+        version: 0.1.0(rxjs@7.8.2)(tsx@4.21.0)
+      '@vibly-ai/concord-adapter-substrate-indexer':
+        specifier: ^0.1.0
+        version: 0.1.0(graphql@16.14.0)
       '@vibly-ai/coordinator-http-contract':
-        specifier: workspace:*
-        version: link:../vibly-coordinator-http-contract
+        specifier: ^0.1.0
+        version: 0.1.0
       better-sqlite3:
         specifier: ^9.6.0
         version: 9.6.0
@@ -151,18 +151,18 @@ importers:
 
   ../concord/packages/adapters:
     dependencies:
-      '@vibly-ai/concord-core':
-        specifier: workspace:*
-        version: link:../core
-      '@vibly-ai/concord-foundation':
-        specifier: workspace:*
-        version: link:../foundation
       '@concord/knowledge':
         specifier: workspace:*
         version: link:../knowledge
       '@concord/state':
         specifier: workspace:*
         version: link:../state
+      '@vibly-ai/concord-core':
+        specifier: workspace:*
+        version: link:../core
+      '@vibly-ai/concord-foundation':
+        specifier: workspace:*
+        version: link:../foundation
     devDependencies:
       '@types/node':
         specifier: ^22.15.3
@@ -176,18 +176,18 @@ importers:
 
   ../concord/packages/adapters-mock-ledger:
     dependencies:
-      '@vibly-ai/concord-core':
-        specifier: workspace:*
-        version: link:../core
-      '@vibly-ai/concord-foundation':
-        specifier: workspace:*
-        version: link:../foundation
       '@concord/incentive':
         specifier: workspace:*
         version: link:../incentive
       '@concord/settlement':
         specifier: workspace:*
         version: link:../settlement
+      '@vibly-ai/concord-core':
+        specifier: workspace:*
+        version: link:../core
+      '@vibly-ai/concord-foundation':
+        specifier: workspace:*
+        version: link:../foundation
       zod:
         specifier: ^3.24.3
         version: 3.25.76
@@ -245,6 +245,9 @@ importers:
       '@concord/agent-directory':
         specifier: workspace:*
         version: link:../agent-directory
+      '@concord/trust-registry':
+        specifier: workspace:*
+        version: link:../trust-registry
       '@vibly-ai/concord-core':
         specifier: workspace:*
         version: link:../core
@@ -254,9 +257,6 @@ importers:
       '@vibly-ai/concord-governance':
         specifier: workspace:*
         version: link:../governance
-      '@concord/trust-registry':
-        specifier: workspace:*
-        version: link:../trust-registry
     devDependencies:
       '@types/node':
         specifier: ^22.15.3
@@ -345,15 +345,15 @@ importers:
 
   ../concord/packages/incentive:
     dependencies:
+      '@concord/reputation':
+        specifier: workspace:*
+        version: link:../reputation
       '@vibly-ai/concord-core':
         specifier: workspace:*
         version: link:../core
       '@vibly-ai/concord-foundation':
         specifier: workspace:*
         version: link:../foundation
-      '@concord/reputation':
-        specifier: workspace:*
-        version: link:../reputation
       zod:
         specifier: ^3.24.3
         version: 3.25.76
@@ -405,15 +405,15 @@ importers:
 
   ../concord/packages/negotiation:
     dependencies:
+      '@concord/reputation':
+        specifier: workspace:*
+        version: link:../reputation
       '@vibly-ai/concord-core':
         specifier: workspace:*
         version: link:../core
       '@vibly-ai/concord-foundation':
         specifier: workspace:*
         version: link:../foundation
-      '@concord/reputation':
-        specifier: workspace:*
-        version: link:../reputation
     devDependencies:
       '@types/node':
         specifier: ^22.15.3
@@ -496,12 +496,6 @@ importers:
       '@concord/adapters':
         specifier: workspace:*
         version: link:../adapters
-      '@vibly-ai/concord-core':
-        specifier: workspace:*
-        version: link:../core
-      '@vibly-ai/concord-foundation':
-        specifier: workspace:*
-        version: link:../foundation
       '@concord/invariants':
         specifier: workspace:*
         version: link:../invariants
@@ -514,6 +508,12 @@ importers:
       '@concord/trace':
         specifier: workspace:*
         version: link:../trace
+      '@vibly-ai/concord-core':
+        specifier: workspace:*
+        version: link:../core
+      '@vibly-ai/concord-foundation':
+        specifier: workspace:*
+        version: link:../foundation
       yaml:
         specifier: ^2.8.1
         version: 2.9.0
@@ -542,18 +542,9 @@ importers:
       '@concord/coordination-view':
         specifier: workspace:*
         version: link:../coordination-view
-      '@vibly-ai/concord-core':
-        specifier: workspace:*
-        version: link:../core
       '@concord/external-input':
         specifier: workspace:*
         version: link:../external-input
-      '@vibly-ai/concord-foundation':
-        specifier: workspace:*
-        version: link:../foundation
-      '@vibly-ai/concord-governance':
-        specifier: workspace:*
-        version: link:../governance
       '@concord/incentive':
         specifier: workspace:*
         version: link:../incentive
@@ -587,6 +578,15 @@ importers:
       '@concord/workflow':
         specifier: workspace:*
         version: link:../workflow
+      '@vibly-ai/concord-core':
+        specifier: workspace:*
+        version: link:../core
+      '@vibly-ai/concord-foundation':
+        specifier: workspace:*
+        version: link:../foundation
+      '@vibly-ai/concord-governance':
+        specifier: workspace:*
+        version: link:../governance
     devDependencies:
       '@types/node':
         specifier: ^22.15.3
@@ -600,15 +600,15 @@ importers:
 
   ../concord/packages/selection:
     dependencies:
+      '@concord/reputation':
+        specifier: workspace:*
+        version: link:../reputation
       '@vibly-ai/concord-core':
         specifier: workspace:*
         version: link:../core
       '@vibly-ai/concord-foundation':
         specifier: workspace:*
         version: link:../foundation
-      '@concord/reputation':
-        specifier: workspace:*
-        version: link:../reputation
       zod:
         specifier: ^3.24.3
         version: 3.25.76
@@ -625,15 +625,15 @@ importers:
 
   ../concord/packages/settlement:
     dependencies:
+      '@concord/incentive':
+        specifier: workspace:*
+        version: link:../incentive
       '@vibly-ai/concord-core':
         specifier: workspace:*
         version: link:../core
       '@vibly-ai/concord-foundation':
         specifier: workspace:*
         version: link:../foundation
-      '@concord/incentive':
-        specifier: workspace:*
-        version: link:../incentive
       zod:
         specifier: ^3.24.3
         version: 3.25.76
@@ -669,18 +669,18 @@ importers:
 
   ../concord/packages/trace:
     dependencies:
-      '@vibly-ai/concord-core':
-        specifier: workspace:*
-        version: link:../core
-      '@vibly-ai/concord-foundation':
-        specifier: workspace:*
-        version: link:../foundation
       '@concord/project':
         specifier: workspace:*
         version: link:../project
       '@concord/state':
         specifier: workspace:*
         version: link:../state
+      '@vibly-ai/concord-core':
+        specifier: workspace:*
+        version: link:../core
+      '@vibly-ai/concord-foundation':
+        specifier: workspace:*
+        version: link:../foundation
     devDependencies:
       '@types/node':
         specifier: ^22.15.3
@@ -713,15 +713,15 @@ importers:
 
   ../concord/packages/workflow:
     dependencies:
+      '@concord/project':
+        specifier: workspace:*
+        version: link:../project
       '@vibly-ai/concord-core':
         specifier: workspace:*
         version: link:../core
       '@vibly-ai/concord-foundation':
         specifier: workspace:*
         version: link:../foundation
-      '@concord/project':
-        specifier: workspace:*
-        version: link:../project
     devDependencies:
       '@types/node':
         specifier: ^22.15.3
@@ -1718,6 +1718,27 @@ packages:
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
+
+  '@vibly-ai/concord-adapter-substrate-actions@0.1.0':
+    resolution: {integrity: sha512-R/rBvpRulAhc+8HneBEHILpWDYVLZopUbghtUznGWX6oZy6Q8wC8vAEmaLGm/i7VysKFx/ezq0cpdX60go8Z5g==}
+
+  '@vibly-ai/concord-adapter-substrate-indexer@0.1.0':
+    resolution: {integrity: sha512-a+TPwuIiRY09RaFn0g7asH/IU4zHC50LiPL8Ww/4uSCw5hp9Lo7qZ8cD2BF6GW8lrd8N/Be/sqE/uY/7STY7fQ==}
+
+  '@vibly-ai/concord-chain-indexing@0.1.0':
+    resolution: {integrity: sha512-8x4VELquDNHiPa3X5mqEi27hfOIMSAV4gaDOdN6gYigCDvMRkywbiwUogedRbRlLv4v00HHtJerxZKE0P7P+WA==}
+
+  '@vibly-ai/concord-core@0.1.0':
+    resolution: {integrity: sha512-nUdti/TGkiwW4TSy8iEt9QmLBMFpCgK5ArDTX+MlNdU0YfNRq1s4pjphLuMooVyRHOeILWVXcSF4GEPV4soENg==}
+
+  '@vibly-ai/concord-foundation@0.1.0':
+    resolution: {integrity: sha512-kHovqUxWbZW3bI7pzEEoQje1ugKjOpPlwl9Ct4J25xY4ZXL1jVyosXWsP2PIkl5BD0YyIeFwc6aGrjsQW6tVgA==}
+
+  '@vibly-ai/concord-governance@0.1.0':
+    resolution: {integrity: sha512-L//1uEzyywJHLGcu3gIcSrlEmPiedms264xOi9/1k3R2Lt3c9iGsrf3ZR0wnjlsmqBO67Tl2i/ylI7Q0b24Lvg==}
+
+  '@vibly-ai/coordinator-http-contract@0.1.0':
+    resolution: {integrity: sha512-4prRFxgUr1TBeu7e5TD7nwJ2cZ6OZe1xJ5hoG4oey82DujXWe4o2hrAHk3hsvh0IQxeJazDUTEgJ2811tB4zBA==}
 
   '@vitest/expect@2.1.9':
     resolution: {integrity: sha512-UJCIkTBenHeKT1TTlKMJWy1laZewsRIzYighyYiJKZreqtdxSos/S1t+ktRMQWu2CKqaarrkeszJx1cgC5tGZw==}
@@ -3839,6 +3860,57 @@ snapshots:
   '@types/ws@8.18.1':
     dependencies:
       '@types/node': 20.19.39
+
+  '@vibly-ai/concord-adapter-substrate-actions@0.1.0(rxjs@7.8.2)(tsx@4.21.0)':
+    dependencies:
+      '@vibly-ai/concord-core': 0.1.0
+      '@vibly-ai/concord-foundation': 0.1.0
+      '@vibly-ai/concord-governance': 0.1.0
+      polkadot-api: 1.23.3(postcss@8.5.12)(rxjs@7.8.2)(tsx@4.21.0)(yaml@2.9.0)
+    transitivePeerDependencies:
+      - '@microsoft/api-extractor'
+      - '@swc/core'
+      - bufferutil
+      - jiti
+      - postcss
+      - rxjs
+      - supports-color
+      - tsx
+      - utf-8-validate
+      - yaml
+
+  '@vibly-ai/concord-adapter-substrate-indexer@0.1.0(graphql@16.14.0)':
+    dependencies:
+      '@vibly-ai/concord-chain-indexing': 0.1.0
+      '@vibly-ai/concord-core': 0.1.0
+      '@vibly-ai/concord-foundation': 0.1.0
+      '@vibly-ai/concord-governance': 0.1.0
+      graphql-request: 6.1.0(graphql@16.14.0)
+    transitivePeerDependencies:
+      - encoding
+      - graphql
+
+  '@vibly-ai/concord-chain-indexing@0.1.0':
+    dependencies:
+      '@vibly-ai/concord-core': 0.1.0
+      '@vibly-ai/concord-foundation': 0.1.0
+
+  '@vibly-ai/concord-core@0.1.0':
+    dependencies:
+      '@vibly-ai/concord-foundation': 0.1.0
+      zod: 3.25.76
+
+  '@vibly-ai/concord-foundation@0.1.0': {}
+
+  '@vibly-ai/concord-governance@0.1.0':
+    dependencies:
+      '@vibly-ai/concord-chain-indexing': 0.1.0
+      '@vibly-ai/concord-core': 0.1.0
+      '@vibly-ai/concord-foundation': 0.1.0
+
+  '@vibly-ai/coordinator-http-contract@0.1.0':
+    dependencies:
+      openapi-fetch: 0.13.8
 
   '@vitest/expect@2.1.9':
     dependencies:

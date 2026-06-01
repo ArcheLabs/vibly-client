@@ -165,6 +165,9 @@ export interface ClientProfile {
   network?: NetworkProfile;
   principalId?: string;
   agentId?: string;
+  localAgentId?: string;
+  identityId?: string;
+  chainAgentId?: string;
   projectId?: string;
   organizationId?: string;
   defaultRuntimeBindingId?: string;

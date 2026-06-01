@@ -6,6 +6,7 @@ import { DaemonConfigSchema } from "../schemas/daemon.js";
 import { subscribeSse } from "../coordinator/sse.js";
 import { runLoop } from "./loop.js";
 import type { DaemonConfig } from "../schemas/daemon.js";
+import type { ClientProfile } from "../domain/clientTypes.js";
 import { getDaemonPidPath } from "../config/paths.js";
 import { CLIENT_VERSION, CONTRACT_VERSION, PROTOCOL_VERSION } from "../version.js";
 import { loadUpgradeState } from "../upgrade/state.js";
@@ -19,13 +20,15 @@ export interface DaemonStartOptions {
 export async function startDaemon(opts: DaemonStartOptions = {}): Promise<void> {
   const log = createLogger(opts.verbose ? "debug" : "info");
   setLogger(log);
-  claimDaemonLock();
 
   const { config: _config, profile } = loadActiveProfile();
   assertProfileNetworkState(profile);
+  validateLinkedAgentProfile(profile);
   const network = getNetworkProfile(profile);
   const token = requireApiToken(profile);
   const client = new CoordinatorClient({ baseUrl: network.coordinatorUrl, token, networkId: network.id });
+  await assertActiveStakeReady(client, profile, network.id);
+  claimDaemonLock();
 
   const daemonProfile = profile.daemon ?? {};
   const daemonConfig: DaemonConfig = DaemonConfigSchema.parse({
@@ -106,6 +109,38 @@ export async function startDaemon(opts: DaemonStartOptions = {}): Promise<void> 
   });
 
   log.info("daemon: stopped");
+}
+
+
+function validateLinkedAgentProfile(profile: ClientProfile): void {
+  const missing = [
+    ["localAgentId", profile.localAgentId],
+    ["principalId", profile.principalId],
+    ["identityId", profile.identityId],
+    ["chainAgentId", profile.chainAgentId],
+    ["organizationId", profile.organizationId],
+  ].filter(([, value]) => !value).map(([key]) => key);
+  if (missing.length > 0) {
+    throw new Error(
+      `Agent is not ready to run. Missing ${missing.join(", ")}. Open https://console.vibly.network/personal-center, finish root-wallet authorization, staking, and run the Console-provided \`vibly agent link ...\` command.`,
+    );
+  }
+}
+
+async function assertActiveStakeReady(client: CoordinatorClient, profile: ClientProfile, chainId: string): Promise<void> {
+  const stakes = await client.listAgentStakes({ principalId: profile.principalId, chainId, status: "active", limit: 20 });
+  const active = stakes.items.some((item) => {
+    if (!item || typeof item !== "object") return false;
+    const row = item as Record<string, unknown>;
+    const chainAgentId = String(row["chainAgentId"] ?? row["agentId"] ?? "");
+    const amount = Number(row["activeAmount"] ?? 0);
+    return chainAgentId === profile.chainAgentId && Number.isFinite(amount) && amount > 0;
+  });
+  if (!active) {
+    throw new Error(
+      "Agent is not ready to run. No active VIB stake was found for this chain agent. Complete staking in Console with the root wallet, wait for indexer sync, then run `vibly agent status` again.",
+    );
+  }
 }
 
 

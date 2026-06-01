@@ -185,6 +185,21 @@ export class CoordinatorClient {
     });
   }
 
+  async getAgentProfile(principalId: string): Promise<Record<string, unknown>> {
+    return runContract(async () => {
+      const result = await fetch(
+        `${this.baseUrl}/agent-profiles/${encodeURIComponent(principalId)}`,
+        { headers: this.requestHeaders() },
+      );
+      if (!result.ok) {
+        const text = await result.text().catch(() => "");
+        throw new CoordinatorApiError(result.status, text || "Agent profile request failed");
+      }
+      const json = (await result.json()) as unknown;
+      return unwrapKey<Record<string, unknown>>(unwrapEnvelope(json), "agent");
+    });
+  }
+
   async changeAgentStatus(agentId: string, input: { nextStatus: string; reason?: string }): Promise<Agent> {
     return runContract(async () => {
       const result = await this.contract.POST("/agents/{agentId}/status", {
