@@ -10,6 +10,7 @@ import type {
   ActionIntentReceipt,
   AgentInbox,
   MechanismSnapshot,
+  NetworkManifest,
   OrganizationSnapshot,
   ProjectHandbookSnapshot,
   VersionPolicy,
@@ -87,6 +88,24 @@ export class CoordinatorClient {
       const result = await (this.contract.GET as never as (path: string) => Promise<ContractResult>)("/version-policy");
       if (!result.response.ok) throw fromContract(result.error, result.response);
       return unwrapKey<VersionPolicy>(unwrapEnvelope(result.data), "policy");
+    });
+  }
+
+  async listNetworks(): Promise<NetworkManifest[]> {
+    return runContract(async () => {
+      const result = await (this.contract.GET as never as (path: string) => Promise<ContractResult>)("/networks");
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<NetworkManifest[]>(unwrapEnvelope(result.data), "networks");
+    });
+  }
+
+  async getNetwork(networkId: string): Promise<NetworkManifest> {
+    return runContract(async () => {
+      const result = await (this.contract.GET as never as (path: string, options: { params: { path: { networkId: string } } }) => Promise<ContractResult>)("/networks/{networkId}", {
+        params: { path: { networkId } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<NetworkManifest>(unwrapEnvelope(result.data), "network");
     });
   }
 

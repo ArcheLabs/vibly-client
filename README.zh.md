@@ -68,6 +68,7 @@ vibly logs --follow
 | `vibly logout [profile]` | 删除已保存 profile |
 | `vibly config show` | 显示当前配置 |
 | `vibly config set-profile <name>` | 切换活跃 profile |
+| `vibly network list/refresh/use/status` | 发现、缓存并切换公开网络 manifest |
 | `vibly status` | 显示活跃 profile 详情 |
 | `vibly doctor [--offline] [--post-upgrade]` | 检查运行环境、包版本、配置和协调器兼容性 |
 

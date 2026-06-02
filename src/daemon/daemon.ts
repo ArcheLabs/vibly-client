@@ -10,6 +10,7 @@ import type { ClientProfile } from "../domain/clientTypes.js";
 import { getDaemonPidPath } from "../config/paths.js";
 import { CLIENT_VERSION, CONTRACT_VERSION, PROTOCOL_VERSION } from "../version.js";
 import { loadUpgradeState } from "../upgrade/state.js";
+import { assertNetworkFeature, refreshActiveProfileNetwork } from "../network/manifest.js";
 
 export interface DaemonStartOptions {
   once?: boolean;
@@ -21,7 +22,13 @@ export async function startDaemon(opts: DaemonStartOptions = {}): Promise<void> 
   const log = createLogger(opts.verbose ? "debug" : "info");
   setLogger(log);
 
-  const { config: _config, profile } = loadActiveProfile();
+  let { config: _config, profile } = loadActiveProfile();
+  const refreshed = await refreshActiveProfileNetwork().catch((error) => {
+    log.warn({ err: String(error) }, "daemon: network manifest refresh failed; using cached network state");
+    return undefined;
+  });
+  if (refreshed) profile = refreshed.profile;
+  assertNetworkFeature(profile, "daemon");
   assertProfileNetworkState(profile);
   validateLinkedAgentProfile(profile);
   const network = getNetworkProfile(profile);

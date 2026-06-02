@@ -68,6 +68,7 @@ vibly logs --follow
 | `vibly logout [profile]` | Remove a saved profile |
 | `vibly config show` | Display current configuration |
 | `vibly config set-profile <name>` | Switch the active profile |
+| `vibly network list/refresh/use/status` | Discover, cache, and switch public network manifests |
 | `vibly status` | Show active profile details |
 | `vibly doctor [--offline] [--post-upgrade]` | Check runtime, package, config, and coordinator compatibility |
 

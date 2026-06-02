@@ -32,12 +32,21 @@ export function getNetworkProfile(profile: ClientProfile) {
   const coordinatorUrl = process.env["COORDINATOR_URL"] ?? profile.network?.coordinatorUrl ?? profile.coordinatorUrl;
   return {
     id: networkId,
-    displayName: profile.network?.displayName ?? networkId,
+    displayName: profile.network?.displayName ?? profile.network?.label ?? networkId,
+    label: profile.network?.label,
     stage: profile.network?.stage ?? "local",
+    status: profile.network?.status,
     coordinatorUrl,
+    coordinatorUrls: profile.network?.coordinatorUrls,
     viblyGenesisHash: process.env["VIBLY_GENESIS_HASH"] ?? profile.network?.viblyGenesisHash,
+    relayGenesisHash: profile.network?.relayGenesisHash,
     relayRpcUrl: process.env["RELAY_RPC_URL"] ?? profile.network?.relayRpcUrl,
+    relayRpcUrls: profile.network?.relayRpcUrls,
     viblyRpcUrl: process.env["VIBLY_RPC_URL"] ?? profile.network?.viblyRpcUrl,
+    viblyRpcUrls: profile.network?.viblyRpcUrls,
+    chains: profile.network?.chains,
+    features: profile.network?.features,
+    messages: profile.network?.messages,
   };
 }
 

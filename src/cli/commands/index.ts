@@ -5,6 +5,7 @@ import { registerLoginCommands } from "./core/login.js";
 import { registerStatusCommands } from "./core/status.js";
 import { registerDoctorCommands } from "./core/doctor.js";
 import { registerBootstrapCommands } from "./core/bootstrap.js";
+import { registerNetworkCommands } from "./core/network.js";
 
 import { registerAgentCommands } from "./identity/agent.js";
 import { registerPrincipalCommands } from "./identity/principal.js";
@@ -51,6 +52,7 @@ export function registerCommands(program: Command): void {
   registerStatusCommands(program);
   registerDoctorCommands(program);
   registerBootstrapCommands(program);
+  registerNetworkCommands(program);
   registerLoginCommands(program);
 
   registerPrincipalCommands(program);

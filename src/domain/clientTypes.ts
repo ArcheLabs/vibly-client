@@ -153,10 +153,66 @@ export interface NetworkProfile {
   id: string;
   displayName?: string;
   stage?: "local" | "testnet" | "mainnet" | string;
+  status?: "active" | "prelaunch" | "maintenance" | "deprecated" | string;
+  label?: string;
+  manifestVersion?: number;
+  updatedAt?: string;
+  ttlSeconds?: number;
+  lastSyncedAt?: string;
   viblyGenesisHash?: string;
   coordinatorUrl: string;
+  coordinatorUrls?: string[];
   relayRpcUrl?: string;
+  relayRpcUrls?: string[];
+  relayGenesisHash?: string;
+  relayTokenSymbol?: string;
+  relayTokenDecimals?: number;
   viblyRpcUrl?: string;
+  viblyRpcUrls?: string[];
+  chains?: {
+    payment?: NetworkChainManifest;
+    vibly?: NetworkChainManifest;
+  };
+  features?: NetworkFeatureFlags;
+  messages?: Record<string, string>;
+}
+
+export interface NetworkChainManifest {
+  chainId: string;
+  genesisHash?: string;
+  rpcUrls: string[];
+  tokenSymbol?: string;
+  tokenDecimals?: number;
+  explorerTxUrl?: string;
+  status?: "online" | "prelaunch" | "maintenance" | "offline" | string;
+}
+
+export interface NetworkFeatureFlags {
+  agentJoin: boolean;
+  daemon: boolean;
+  staking: boolean;
+  rootIdentityRegistration: boolean;
+  getVibConversion: boolean;
+  getVibClaim: boolean;
+}
+
+export interface NetworkManifest {
+  manifestVersion: number;
+  updatedAt: string;
+  ttlSeconds: number;
+  id: string;
+  label: string;
+  stage: "local" | "testnet" | "mainnet" | string;
+  status: "active" | "prelaunch" | "maintenance" | "deprecated" | string;
+  coordinatorUrls: string[];
+  chains: {
+    payment: NetworkChainManifest;
+    vibly: NetworkChainManifest;
+  };
+  features: NetworkFeatureFlags;
+  messages?: Record<string, string>;
+  minimumClientVersion?: string;
+  recommendedClientVersion?: string;
 }
 
 export interface ClientProfile {

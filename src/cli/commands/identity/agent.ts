@@ -10,6 +10,7 @@ import { getCoordinatorClient } from "../shared/client.js";
 import { handleCliError } from "../shared/errors.js";
 import { submitAgentStakeTx } from "../../../chain/agentStaking.js";
 import { submitIdentityOnboardingTx } from "../../../chain/identityOnboarding.js";
+import { assertNetworkFeature, refreshActiveProfileNetwork } from "../../../network/manifest.js";
 import {
   getAgentDir,
   getAgentEnrollmentPath,
@@ -60,6 +61,7 @@ export function registerAgentCommands(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
+        await refreshActiveProfileNetwork().catch(() => undefined);
         const { client, profile } = getCoordinatorClient();
         const id = (opts.id as string | undefined) ?? requireAgentId(profile);
         const a = await client.getAgent(id);
@@ -119,6 +121,8 @@ export function registerAgentCommands(program: Command): void {
           chainAgent: Boolean(profile.chainAgentId || stringValue((agentRecord as Record<string, unknown> | undefined)?.["chainAgentId"])),
           activeStake: stakeItems.some((item) => hasActiveStake(item, profile.chainAgentId)),
           organization: Boolean(organizationId),
+          networkActive: (profile.network?.status ?? "active") === "active",
+          daemonFeature: profile.network?.features?.daemon !== false,
         };
         const status = {
           profile: profile.name,
@@ -129,6 +133,7 @@ export function registerAgentCommands(program: Command): void {
           chainAgentId: profile.chainAgentId,
           organizationId,
           wallet: profile.wallet?.publicAddress ? { ...profile.wallet, publicAddress: maskAddress(profile.wallet.publicAddress) } : undefined,
+          network: profile.network,
           localAgent: profile.localAgentId ? { localAgentId: profile.localAgentId, sessionPublicKey, enrollmentPath: getAgentEnrollmentPath(profile.localAgentId) } : undefined,
           readiness: { ...readiness, daemonReady: Object.values(readiness).every(Boolean) },
           version: { clientVersion: CLIENT_VERSION, contractVersion: CONTRACT_VERSION, protocolVersion: PROTOCOL_VERSION, policy: versionPolicy },
@@ -151,7 +156,9 @@ export function registerAgentCommands(program: Command): void {
     .action(async (opts) => {
       try {
         if (!opts.confirm) throw new Error("agent join requires --confirm after reviewing eligibility");
+        await refreshActiveProfileNetwork().catch(() => undefined);
         const { client, config, profile } = getCoordinatorClient();
+        assertNetworkFeature(profile, "agentJoin");
         const principalId = requirePrincipalId(profile);
         const organizationId = opts.organization as string;
         const eligibility = await client.getJoinEligibility(organizationId, principalId);
@@ -491,7 +498,10 @@ function registerAgentDescriptorCommands(agent: Command): void {
 
 async function runStakeTx(kind: "bond" | "request-unbond" | "cancel-unbond" | "release-unbond", opts: Record<string, unknown>): Promise<void> {
   try {
-    const agentId = (opts["agentId"] as string | undefined) ?? requireAgentId(loadActiveProfile().profile);
+    await refreshActiveProfileNetwork().catch(() => undefined);
+    const { profile } = loadActiveProfile();
+    assertNetworkFeature(profile, "staking");
+    const agentId = (opts["agentId"] as string | undefined) ?? requireAgentId(profile);
     const plan = {
       kind,
       identityId: opts["identityId"] as string,
@@ -651,6 +661,8 @@ function registerChainIdentityCommands(agent: Command): void {
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
+        await refreshActiveProfileNetwork().catch(() => undefined);
+        assertNetworkFeature(loadActiveProfile().profile, "rootIdentityRegistration");
         const receipt = await submitIdentityOnboardingTx({
           kind: "register-identity",
           signer: {
