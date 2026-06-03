@@ -7,6 +7,7 @@ import { saveConfig } from "../../../config/config.js";
 import { outputOk, printOutput } from "../../../domain/apiTypes.js";
 import { CLIENT_VERSION, CONTRACT_VERSION, PROTOCOL_VERSION } from "../../../version.js";
 import { getCoordinatorClient } from "../shared/client.js";
+import { CoordinatorClient } from "../../../coordinator/client.js";
 import { handleCliError } from "../shared/errors.js";
 import { submitAgentStakeTx } from "../../../chain/agentStaking.js";
 import { submitIdentityOnboardingTx } from "../../../chain/identityOnboarding.js";
@@ -243,6 +244,89 @@ export function registerAgentCommands(program: Command): void {
           ``,
           `Next: vibly agent status --organization ${profile.organizationId}`,
         ].filter(Boolean).join("\n"));
+      } catch (e) {
+        handleCliError(e, opts.json as boolean | undefined);
+      }
+    });
+
+  agent
+    .command("wait-link")
+    .description("Wait for Console to authorize this local agent, then complete enrollment")
+    .requiredOption("--local-agent-id <id>", "Local agent ID created by `agent init`")
+    .option("--chain-id <id>", "Vibly network / chain ID")
+    .option("--coordinator <url>", "Coordinator base URL")
+    .option("--timeout-ms <ms>", "Maximum time to wait for Console authorization", "300000")
+    .option("--interval-ms <ms>", "Polling interval", "3000")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const localAgentId = opts.localAgentId as string;
+        const enrollPath = getAgentEnrollmentPath(localAgentId);
+        if (!existsSync(enrollPath)) {
+          throw new Error(`Enrollment file not found: ${enrollPath}. Run \`vibly agent init\` first.`);
+        }
+        if (opts.coordinator || opts.chainId) {
+          const { config, profile } = loadActiveProfile();
+          if (opts.coordinator) profile.coordinatorUrl = opts.coordinator as string;
+          if (opts.chainId || opts.coordinator) {
+            const chainId = (opts.chainId as string | undefined) ?? profile.network?.id ?? "substrate:vibly-testnet";
+            const coordinatorUrl = (opts.coordinator as string | undefined) ?? profile.network?.coordinatorUrl ?? profile.coordinatorUrl;
+            profile.network = {
+              ...(profile.network ?? { id: chainId, coordinatorUrl }),
+              id: chainId,
+              coordinatorUrl,
+              stage: profile.network?.stage ?? "testnet",
+            };
+          }
+          config.profiles[profile.name] = profile;
+          saveConfig(config);
+        }
+
+        const { config, profile } = loadActiveProfile();
+        const descriptor = JSON.parse(await readFile(enrollPath, "utf8")) as Record<string, unknown>;
+        const sessionPublicKey = String(descriptor["sessionPublicKey"] ?? "");
+        if (!sessionPublicKey) throw new Error(`Enrollment file is missing sessionPublicKey: ${enrollPath}`);
+        const networkId = (opts.chainId as string | undefined) ?? profile.network?.id ?? "substrate:vibly-solo";
+        const coordinatorUrl = (opts.coordinator as string | undefined) ?? profile.network?.coordinatorUrl ?? profile.coordinatorUrl ?? "http://localhost:8787";
+        const client = new CoordinatorClient({ baseUrl: coordinatorUrl, token: "public", networkId });
+        const timeoutMs = parsePositiveInt(opts.timeoutMs as string, 300000);
+        const intervalMs = parsePositiveInt(opts.intervalMs as string, 3000);
+        const deadline = Date.now() + timeoutMs;
+
+        let lastStatus: Record<string, unknown> | undefined;
+        while (Date.now() <= deadline) {
+          lastStatus = await client.getAgentEnrollmentStatus(sessionPublicKey);
+          const status = String(lastStatus["status"] ?? "");
+          const completionMessage = typeof lastStatus["completionMessage"] === "string" ? lastStatus["completionMessage"] : undefined;
+          if ((status === "pending_client" || status === "completed") && completionMessage) {
+            const sessionSignature = await signWithLocalAgentSession(localAgentId, completionMessage);
+            const authorization = await client.completeAgentEnrollment({ descriptor, sessionSignature });
+            const linked = persistCompletedAgentEnrollment({
+              config,
+              profile,
+              localAgentId,
+              descriptor,
+              authorization,
+              networkId,
+              coordinatorUrl,
+            });
+            printOutput(outputOk(linked), Boolean(opts.json), () => [
+              `Agent linked to profile '${profile.name}'.`,
+              `  localAgentId     : ${localAgentId}`,
+              `  sessionPublicKey : ${sessionPublicKey}`,
+              `  principalId      : ${linked.principalId}`,
+              linked.identityId ? `  identityId       : ${linked.identityId}` : undefined,
+              linked.chainAgentId ? `  chainAgentId     : ${linked.chainAgentId}` : undefined,
+              `  organizationId   : ${linked.organizationId}`,
+              `  runtime token    : saved to local profile config`,
+              ``,
+              `Next: vibly agent status --organization ${linked.organizationId}`,
+            ].filter(Boolean).join("\n"));
+            return;
+          }
+          await sleep(intervalMs);
+        }
+        throw new Error(`Timed out waiting for Console authorization for ${sessionPublicKey}. Last status: ${String(lastStatus?.["status"] ?? "unknown")}`);
       } catch (e) {
         handleCliError(e, opts.json as boolean | undefined);
       }
@@ -619,8 +703,18 @@ function maskAddress(value: string): string {
 }
 
 function buildConsoleAddAgentUrl(descriptor: Record<string, unknown>): string {
-  const encoded = Buffer.from(JSON.stringify(descriptor), "utf8").toString("base64url");
-  return `${getConsoleBaseUrl()}/personal-center/add-agent#enrollment=${encoded}`;
+  const params = new URLSearchParams();
+  const sessionPublicKey = typeof descriptor["sessionPublicKey"] === "string" ? descriptor["sessionPublicKey"] : "";
+  const localAgentId = typeof descriptor["localAgentId"] === "string" ? descriptor["localAgentId"] : "";
+  const displayName = typeof descriptor["displayName"] === "string" ? descriptor["displayName"] : "";
+  const keyType = typeof descriptor["keyType"] === "string" ? descriptor["keyType"] : "sr25519";
+  const organizationIds = Array.isArray(descriptor["organizationIds"]) ? descriptor["organizationIds"].map(String).filter(Boolean).join(",") : "";
+  params.set("sessionPublicKey", sessionPublicKey);
+  if (localAgentId) params.set("localAgentId", localAgentId);
+  if (displayName) params.set("displayName", displayName);
+  if (keyType) params.set("keyType", keyType);
+  if (organizationIds) params.set("organizationIds", organizationIds);
+  return `${getConsoleBaseUrl()}/personal-center/add-agent#${params.toString()}`;
 }
 
 function getConsoleBaseUrl(): string {
@@ -638,6 +732,94 @@ function getConsoleBaseUrl(): string {
   } catch {
     return "https://console.vibly.network";
   }
+}
+
+async function signWithLocalAgentSession(localAgentId: string, message: string): Promise<string> {
+  const secretPath = getAgentSessionKeyPath(localAgentId);
+  if (!existsSync(secretPath)) {
+    throw new Error(`Session secret not found: ${secretPath}`);
+  }
+  const secret = JSON.parse(await readFile(secretPath, "utf8")) as { signerUri?: string };
+  if (!secret.signerUri) throw new Error(`Session secret is missing signerUri: ${secretPath}`);
+
+  const [keyringModule, cryptoModule, utilModule] = await Promise.all([
+    dynamicImport("@polkadot/keyring"),
+    dynamicImport("@polkadot/util-crypto"),
+    dynamicImport("@polkadot/util"),
+  ]);
+  const { Keyring } = keyringModule as {
+    Keyring: new (options: { type: "sr25519" }) => {
+      addFromUri: (uri: string) => { sign: (msg: Uint8Array) => Uint8Array };
+    };
+  };
+  const { cryptoWaitReady } = cryptoModule as { cryptoWaitReady: () => Promise<void> };
+  const { u8aToHex, stringToU8a } = utilModule as {
+    u8aToHex: (bytes: Uint8Array) => string;
+    stringToU8a: (str: string) => Uint8Array;
+  };
+
+  await cryptoWaitReady();
+  const keyring = new Keyring({ type: "sr25519" });
+  const pair = keyring.addFromUri(secret.signerUri);
+  return u8aToHex(pair.sign(stringToU8a(message)));
+}
+
+function persistCompletedAgentEnrollment(input: {
+  config: ReturnType<typeof loadActiveProfile>["config"];
+  profile: ReturnType<typeof loadActiveProfile>["profile"];
+  localAgentId: string;
+  descriptor: Record<string, unknown>;
+  authorization: Record<string, unknown>;
+  networkId: string;
+  coordinatorUrl: string;
+}) {
+  const authProfile = asRecord(input.authorization["profile"]);
+  const organizationIds = Array.isArray(authProfile["organizationIds"])
+    ? authProfile["organizationIds"].map(String).filter(Boolean)
+    : Array.isArray(input.descriptor["organizationIds"])
+      ? input.descriptor["organizationIds"].map(String).filter(Boolean)
+      : [];
+  const principalId = String(input.authorization["principalId"] ?? authProfile["principalId"] ?? "");
+  if (!principalId) throw new Error("Coordinator did not return principalId");
+  input.profile.localAgentId = input.localAgentId;
+  input.profile.principalId = principalId;
+  input.profile.agentId = principalId;
+  if (typeof authProfile["identityId"] === "string") input.profile.identityId = authProfile["identityId"];
+  if (typeof authProfile["chainAgentId"] === "string") input.profile.chainAgentId = authProfile["chainAgentId"];
+  input.profile.organizationId = organizationIds[0] ?? input.profile.organizationId ?? "default";
+  input.profile.coordinatorUrl = input.coordinatorUrl;
+  if (typeof input.authorization["runtimeToken"] === "string") input.profile.apiTokenRef = input.authorization["runtimeToken"];
+  input.profile.network = {
+    ...(input.profile.network ?? { id: input.networkId, coordinatorUrl: input.coordinatorUrl }),
+    id: input.networkId,
+    coordinatorUrl: input.coordinatorUrl,
+    stage: input.profile.network?.stage ?? "testnet",
+  };
+  input.config.profiles[input.profile.name] = input.profile;
+  saveConfig(input.config);
+  return {
+    profile: input.profile.name,
+    localAgentId: input.localAgentId,
+    sessionPublicKey: input.descriptor["sessionPublicKey"],
+    principalId: input.profile.principalId,
+    identityId: input.profile.identityId,
+    chainAgentId: input.profile.chainAgentId,
+    organizationId: input.profile.organizationId,
+    runtimeTokenSaved: typeof input.authorization["runtimeToken"] === "string",
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function dynamicImport(specifier: string): Promise<Record<string, unknown>> {
@@ -834,7 +1016,8 @@ function registerAgentInitCommands(agent: Command): void {
           `  Next: open Console to add this local agent:`,
           `  ${consoleAddAgentUrl}`,
           ``,
-          `  Fallback: paste the contents of ${enrollPath} in Personal Center → Add Local Agent.`,
+          `  Fallback: enter the session public key above in Personal Center → Add Agent.`,
+          `  Then run: vibly agent wait-link --local-agent-id ${localId}`,
         ].join("\n"));
       } catch (e) {
         handleCliError(e, opts.json as boolean | undefined);

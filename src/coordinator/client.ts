@@ -285,6 +285,35 @@ export class CoordinatorClient {
     });
   }
 
+  async getAgentEnrollmentStatus(sessionPublicKey: string): Promise<Record<string, unknown>> {
+    return runContract(async () => {
+      const get = this.contract.GET as never as (
+        path: string,
+        options: { params: { query: { sessionPublicKey: string } } },
+      ) => Promise<ContractResult>;
+      const result = await get("/agent-enrollments/status", {
+        params: { query: { sessionPublicKey } },
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<Record<string, unknown>>(unwrapEnvelope(result.data), "authorization");
+    });
+  }
+
+  async completeAgentEnrollment(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return runContract(async () => {
+      const post = this.contract.POST as never as (
+        path: string,
+        options: { body: never; headers?: Record<string, string> },
+      ) => Promise<ContractResult>;
+      const result = await post("/agent-enrollments/complete", {
+        body: body as never,
+        headers: idempotencyHeaders(),
+      });
+      if (!result.response.ok) throw fromContract(result.error, result.response);
+      return unwrapKey<Record<string, unknown>>(unwrapEnvelope(result.data), "authorization");
+    });
+  }
+
   // ── Projects ─────────────────────────────────────────────────────────────────
 
   async createProject(input: {

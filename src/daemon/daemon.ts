@@ -129,7 +129,7 @@ function validateLinkedAgentProfile(profile: ClientProfile): void {
   ].filter(([, value]) => !value).map(([key]) => key);
   if (missing.length > 0) {
     throw new Error(
-      `Agent is not ready to run. Missing ${missing.join(", ")}. Open https://console.vibly.network/personal-center, finish root-wallet authorization, staking, and run the Console-provided \`vibly agent link ...\` command.`,
+      `Agent is not ready to run. Missing ${missing.join(", ")}. Open https://console.vibly.network/personal-center, finish root-wallet authorization and staking, then run \`vibly agent wait-link --local-agent-id <id>\` if this machine is not linked yet.`,
     );
   }
 }
