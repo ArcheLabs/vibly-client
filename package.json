@@ -1,6 +1,6 @@
 {
   "name": "@vibly-ai/client",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Vibly Agent Node CLI and Daemon",
   "type": "module",
   "bin": {
@@ -16,12 +16,12 @@
     "prepack": "pnpm build"
   },
   "dependencies": {
-    "@vibly-ai/concord-adapter-substrate-actions": "^0.1.0",
-    "@vibly-ai/concord-adapter-substrate-indexer": "^0.1.0",
+    "@vibly-ai/concord-adapter-substrate-actions": "^0.1.1",
+    "@vibly-ai/concord-adapter-substrate-indexer": "^0.1.1",
     "@polkadot/api": "^16.5.6",
     "@polkadot/keyring": "^14.0.3",
     "@polkadot/util-crypto": "^14.0.3",
-    "@vibly-ai/coordinator-http-contract": "^0.1.0",
+    "@vibly-ai/coordinator-http-contract": "^0.1.1",
     "better-sqlite3": "^9.6.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
