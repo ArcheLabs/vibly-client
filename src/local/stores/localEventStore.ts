@@ -22,11 +22,11 @@ export class LocalEventStore {
         (@id, @type, @timestamp, @actor_id, @correlation_id, @envelope_json, @synced_at)
     `);
     stmt.run({
-      id: event.id,
-      type: event.type,
-      timestamp: event.timestamp ?? new Date().toISOString(),
-      actor_id: event.actorId ?? null,
-      correlation_id: event.correlationId ?? null,
+      id: stringValue(event.id) ?? cryptoRandomId(),
+      type: stringValue(event.type) ?? "UnknownEvent",
+      timestamp: timestampValue(event.timestamp) ?? new Date().toISOString(),
+      actor_id: stringValue(event.actorId) ?? null,
+      correlation_id: stringValue(event.correlationId) ?? null,
       envelope_json: JSON.stringify(event),
       synced_at: new Date().toISOString(),
     });
@@ -85,4 +85,24 @@ export class LocalEventStore {
     const row = this.db.prepare("SELECT COUNT(*) as cnt FROM local_events").get() as { cnt: number };
     return row.cnt;
   }
+}
+
+function timestampValue(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && "iso" in value) {
+    const iso = (value as { iso?: unknown }).iso;
+    if (typeof iso === "string") return iso;
+  }
+  return stringValue(value);
+}
+
+function stringValue(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "bigint" || typeof value === "boolean") return String(value);
+  return undefined;
+}
+
+function cryptoRandomId(): string {
+  return `event_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }

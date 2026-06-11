@@ -8,11 +8,14 @@ export function runMigrations(db: DB): void {
   const schemaPath = resolve(__dirname, "schema.sql");
   const sql = readFileSync(schemaPath, "utf8");
 
-  // Split by semicolon and run each statement
   const statements = sql
+    .split("\n")
+    .map((line) => line.trimStart())
+    .filter((line) => !line.startsWith("--"))
+    .join("\n")
     .split(";")
     .map((s) => s.trim())
-    .filter((s) => s.length > 0 && !s.startsWith("--"));
+    .filter((s) => s.length > 0);
 
   db.transaction(() => {
     for (const stmt of statements) {
