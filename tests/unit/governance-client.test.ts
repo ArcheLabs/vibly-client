@@ -1,11 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CoordinatorClient } from "../../src/coordinator/client.js";
+import { setLogger } from "../../src/config/logger.js";
 
 const client = () => new CoordinatorClient({ baseUrl: "http://coordinator.test", token: "dev-token", maxRetries: 0 });
+const expectedVersionHeaders = {
+  "x-vibly-client-package": "@vibly-ai/client",
+  "x-vibly-client-version": "0.1.1",
+  "x-vibly-contract-version": "0.1.0",
+  "x-vibly-protocol-version": "0.2",
+};
 
 describe("CoordinatorClient governance reads", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    setLogger(noopLogger());
   });
 
   it("lists merged governance views with backend filter", async () => {
@@ -37,6 +45,7 @@ describe("CoordinatorClient governance reads", () => {
     expect(request?.url).toContain("backend=evm-governor");
     expect(request?.url).toContain("limit=10");
     expect(request?.headers.get("Authorization")).toBe("Bearer dev-token");
+    expectVersionHeaders(request?.headers);
   });
 
   it("lists governance subjects with backend filter", async () => {
@@ -104,6 +113,7 @@ describe("CoordinatorClient governance reads", () => {
     const request = (fetchMock.mock.calls as unknown as Array<[Request]>)[0]?.[0];
     expect(request?.url).toBe("http://coordinator.test/governance/backends");
     expect(request?.method).toBe("GET");
+    expectVersionHeaders(request?.headers);
   });
 
   it("submits an OpenGov intent through the coordinator", async () => {
@@ -125,5 +135,94 @@ describe("CoordinatorClient governance reads", () => {
     expect(request?.url).toBe("http://coordinator.test/governance/intents/intent-1/submit-opengov");
     expect(request?.method).toBe("POST");
     expect(request?.headers.get("Idempotency-Key")).toBeTruthy();
+    expectVersionHeaders(request?.headers);
+  });
+
+  it("sends version headers on handwritten action intent requests", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        ok: true,
+        data: { eventId: "event_1", status: "accepted" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await client().submitActionIntent({
+      type: "SubmitObservationResult",
+      payload: { assignmentId: "assignment_1", result: {} },
+    } as never);
+
+    const headers = headersFromFetchCall(fetchMock, 0);
+    expect(headers.get("Authorization")).toBe("Bearer dev-token");
+    expect(headers.get("Content-Type")).toBe("application/json");
+    expectVersionHeaders(headers);
+  });
+
+  it("logs coordinator 426 details without logging Authorization", async () => {
+    const errorSpy = vi.fn();
+    setLogger({ error: errorSpy } as never);
+    const fetchMock = vi.fn(async () =>
+      Response.json(
+        {
+          ok: false,
+          error: {
+            code: "UPGRADE_REQUIRED",
+            message: "Client version headers are required",
+            details: {
+              received: {
+                client: undefined,
+                contract: "0.1.0",
+                protocol: "0.2",
+              },
+            },
+          },
+        },
+        { status: 426 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(client().submitActionIntent({
+      type: "SubmitObservationResult",
+      payload: { assignmentId: "assignment_1", result: {} },
+    } as never)).rejects.toMatchObject({ status: 426, apiCode: "UPGRADE_REQUIRED" });
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [logPayload] = errorSpy.mock.calls[0] as [{ coordinatorError: unknown }, string];
+    expect(logPayload.coordinatorError).toEqual({
+      code: "UPGRADE_REQUIRED",
+      message: "Client version headers are required",
+      details: {
+        received: {
+          client: undefined,
+          contract: "0.1.0",
+          protocol: "0.2",
+        },
+      },
+    });
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("dev-token");
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("Authorization");
   });
 });
+
+function expectVersionHeaders(headers: Headers | undefined): void {
+  expect(headers).toBeTruthy();
+  for (const [key, value] of Object.entries(expectedVersionHeaders)) {
+    expect(headers?.get(key)).toBe(value);
+  }
+}
+
+function headersFromFetchCall(fetchMock: ReturnType<typeof vi.fn>, callIndex: number): Headers {
+  const [input, init] = fetchMock.mock.calls[callIndex] as [RequestInfo | URL, RequestInit | undefined];
+  if (input instanceof Request) return input.headers;
+  return new Headers(init?.headers);
+}
+
+function noopLogger(): never {
+  return {
+    debug: () => undefined,
+    error: () => undefined,
+    info: () => undefined,
+    warn: () => undefined,
+  } as never;
+}

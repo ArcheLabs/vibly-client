@@ -1,4 +1,6 @@
 import { createParser } from "eventsource-parser";
+import { clientVersionHeaders } from "../version.js";
+import { logUpgradeRequiredResponse } from "./upgradeRequired.js";
 import type { EventEnvelope } from "./types.js";
 
 export interface SseOptions {
@@ -27,12 +29,14 @@ export async function subscribeSse(opts: SseOptions): Promise<void> {
     try {
       const headers: Record<string, string> = {
         Authorization: `Bearer ${token}`,
+        ...clientVersionHeaders(),
         Accept: "text/event-stream",
         "Cache-Control": "no-cache",
       };
       if (lastEventId) headers["Last-Event-ID"] = lastEventId;
 
       const res = await fetch(url, { headers, signal });
+      await logUpgradeRequiredResponse(res);
       if (!res.ok || !res.body) {
         throw new Error(`SSE connection failed: HTTP ${res.status}`);
       }

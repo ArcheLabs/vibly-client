@@ -4,6 +4,7 @@ import { CoordinatorApiError as ContractApiError } from "@vibly-ai/coordinator-h
 import { createCliContractClient, type ContractCoordinatorClient } from "./contractClient.js";
 import { path } from "./contractPaths.js";
 import { CoordinatorApiError } from "./errors.js";
+import { coordinatorErrorFromResponse, logUpgradeRequiredResponse } from "./upgradeRequired.js";
 import { clientVersionHeaders } from "../version.js";
 import type {
   ActionIntentInput,
@@ -206,13 +207,12 @@ export class CoordinatorClient {
 
   async getAgentProfile(principalId: string): Promise<Record<string, unknown>> {
     return runContract(async () => {
-      const result = await fetch(
+      const result = await this.fetchCoordinator(
         `${this.baseUrl}/agent-profiles/${encodeURIComponent(principalId)}`,
         { headers: this.requestHeaders() },
       );
       if (!result.ok) {
-        const text = await result.text().catch(() => "");
-        throw new CoordinatorApiError(result.status, text || "Agent profile request failed");
+        throw await this.apiErrorFromResponse(result, "Agent profile request failed");
       }
       const json = (await result.json()) as unknown;
       return unwrapKey<Record<string, unknown>>(unwrapEnvelope(json), "agent");
@@ -799,7 +799,7 @@ export class CoordinatorClient {
 
   async submitActionIntent(intent: ActionIntentInput): Promise<ActionIntentReceipt> {
     return runContract(async () => {
-      const result = await fetch(`${this.baseUrl}/action-intents`, {
+      const result = await this.fetchCoordinator(`${this.baseUrl}/action-intents`, {
         method: "POST",
         headers: this.requestHeaders({
           "Content-Type": "application/json",
@@ -808,8 +808,7 @@ export class CoordinatorClient {
         body: JSON.stringify(intent),
       });
       if (!result.ok) {
-        const text = await result.text().catch(() => "");
-        throw new CoordinatorApiError(result.status, text || "ActionIntent submission failed");
+        throw await this.apiErrorFromResponse(result, "ActionIntent submission failed");
       }
       const json = (await result.json()) as unknown;
       const data = unwrapEnvelope<ActionIntentReceipt>(json);
@@ -819,13 +818,12 @@ export class CoordinatorClient {
 
   async getAgentInbox(principalId: string, query?: { organizationId?: string; projectId?: string; limit?: number }): Promise<AgentInbox> {
     return runContract(async () => {
-      const result = await fetch(
+      const result = await this.fetchCoordinator(
         `${this.baseUrl}/agents/${encodeURIComponent(principalId)}/inbox?${new URLSearchParams(queryFromInput(query))}`,
         { headers: this.requestHeaders() },
       );
       if (!result.ok) {
-        const text = await result.text().catch(() => "");
-        throw new CoordinatorApiError(result.status, text || "Agent inbox request failed");
+        throw await this.apiErrorFromResponse(result, "Agent inbox request failed");
       }
       const json = (await result.json()) as unknown;
       const data = unwrapEnvelope<{ inbox: AgentInbox }>(json);
@@ -837,7 +835,7 @@ export class CoordinatorClient {
 
   async listOrganizations(query?: { limit?: number; cursor?: string }): Promise<{ items: OrganizationSnapshot[] }> {
     try {
-      const result = await fetch(
+      const result = await this.fetchCoordinator(
         `${this.baseUrl}/organizations?${new URLSearchParams(queryFromInput(query))}`,
         { headers: this.requestHeaders() },
       );
@@ -852,7 +850,7 @@ export class CoordinatorClient {
 
   async getOrganization(id: string): Promise<OrganizationSnapshot | null> {
     try {
-      const result = await fetch(`${this.baseUrl}/organizations/${encodeURIComponent(id)}`, {
+      const result = await this.fetchCoordinator(`${this.baseUrl}/organizations/${encodeURIComponent(id)}`, {
         headers: this.requestHeaders(),
       });
       if (!result.ok) return null;
@@ -867,7 +865,7 @@ export class CoordinatorClient {
 
   async getProjectHandbook(projectId: string): Promise<ProjectHandbookSnapshot | null> {
     try {
-      const result = await fetch(
+      const result = await this.fetchCoordinator(
         `${this.baseUrl}/projects/${encodeURIComponent(projectId)}/handbook`,
         { headers: this.requestHeaders() },
       );
@@ -885,7 +883,7 @@ export class CoordinatorClient {
 
   async listMechanisms(query?: { organizationId?: string; projectId?: string; limit?: number }): Promise<{ items: MechanismSnapshot[] }> {
     try {
-      const result = await fetch(
+      const result = await this.fetchCoordinator(
         `${this.baseUrl}/mechanisms?${new URLSearchParams(queryFromInput(query))}`,
         { headers: this.requestHeaders() },
       );
@@ -922,10 +920,10 @@ export class CoordinatorClient {
 
   async getTask(taskId: string): Promise<unknown> {
     return runContract(async () => {
-      const result = await fetch(`${this.baseUrl}/tasks/${encodeURIComponent(taskId)}`, {
+      const result = await this.fetchCoordinator(`${this.baseUrl}/tasks/${encodeURIComponent(taskId)}`, {
         headers: this.requestHeaders(),
       });
-      if (!result.ok) throw new CoordinatorApiError(result.status, `Failed to fetch task ${taskId}`);
+      if (!result.ok) throw await this.apiErrorFromResponse(result, `Failed to fetch task ${taskId}`);
       const json = (await result.json()) as unknown;
       const envelope = unwrapEnvelope(json);
       // Coordinator wraps task under { task: {...} } or returns it directly
@@ -956,7 +954,7 @@ export class CoordinatorClient {
 
   private async _listQueue(endpoint: string, query?: Record<string, string | number | boolean | undefined>): Promise<{ items: unknown[] }> {
     try {
-      const result = await fetch(
+      const result = await this.fetchCoordinator(
         `${this.baseUrl}${endpoint}?${new URLSearchParams(queryFromInput(query))}`,
         { headers: this.requestHeaders() },
       );
@@ -1006,6 +1004,17 @@ export class CoordinatorClient {
       ...(this.networkId ? { "X-Vibly-Network-Id": this.networkId } : {}),
       ...(extra ?? {}),
     };
+  }
+
+  private async fetchCoordinator(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const response = await fetch(input, init);
+    await logUpgradeRequiredResponse(response);
+    return response;
+  }
+
+  private async apiErrorFromResponse(response: Response, fallbackMessage: string): Promise<CoordinatorApiError> {
+    const error = await coordinatorErrorFromResponse(response, fallbackMessage);
+    return new CoordinatorApiError(response.status, error.message, error.code);
   }
 
   /** Base URL for SSE stream */

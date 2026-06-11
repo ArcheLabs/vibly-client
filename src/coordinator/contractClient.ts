@@ -14,6 +14,7 @@
  */
 import { createCoordinatorClient } from "@vibly-ai/coordinator-http-contract/client";
 import { clientVersionHeaders } from "../version.js";
+import { logUpgradeRequiredResponse } from "./upgradeRequired.js";
 import type { CoordinatorClient as ContractClient } from "@vibly-ai/coordinator-http-contract/client";
 
 export type ContractCoordinatorClient = ContractClient;
@@ -42,6 +43,7 @@ export function createCliContractClient(opts: CliContractOptions): ContractCoord
       if (attempt > 0) await sleep(retryBaseMs * 2 ** (attempt - 1));
       try {
         const res = await fetch(input as RequestInfo, init);
+        await logUpgradeRequiredResponse(res);
         if (!isGet) return res;
         if (res.status >= 500) {
           lastError = new Error(`HTTP ${res.status}`);

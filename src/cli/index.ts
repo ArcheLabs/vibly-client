@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { registerCommands } from "./commands/index.js";
+import { CLIENT_VERSION } from "../version.js";
 
 export function buildCli(): Command {
   const program = new Command();
@@ -7,7 +8,7 @@ export function buildCli(): Command {
   program
     .name("vibly")
     .description("Vibly Agent Node CLI")
-    .version("0.1.0")
+    .version(CLIENT_VERSION)
     .option("--profile <name>", "Profile to use")
     .option("--config <path>", "Config file path")
     .option("--verbose", "Verbose logging")

@@ -8,7 +8,7 @@ import { runLoop } from "./loop.js";
 import type { DaemonConfig } from "../schemas/daemon.js";
 import type { ClientProfile } from "../domain/clientTypes.js";
 import { getDaemonPidPath } from "../config/paths.js";
-import { CLIENT_VERSION, CONTRACT_VERSION, PROTOCOL_VERSION } from "../version.js";
+import { clientVersionHeaderValues } from "../version.js";
 import { loadUpgradeState } from "../upgrade/state.js";
 import { assertNetworkFeature, refreshActiveProfileNetwork } from "../network/manifest.js";
 
@@ -34,6 +34,10 @@ export async function startDaemon(opts: DaemonStartOptions = {}): Promise<void> 
   const network = getNetworkProfile(profile);
   const token = requireApiToken(profile);
   const client = new CoordinatorClient({ baseUrl: network.coordinatorUrl, token, networkId: network.id });
+  const clientHeaders = clientVersionHeaderValues();
+  log.debug(
+    `coordinator client headers: package=${clientHeaders.packageName} client=${clientHeaders.clientVersion} contract=${clientHeaders.contractVersion} protocol=${clientHeaders.protocolVersion}`,
+  );
   await assertActiveStakeReady(client, profile, network.id);
   claimDaemonLock();
 
@@ -182,12 +186,13 @@ function isProcessAlive(pid: number): boolean {
 async function sendHeartbeat(client: CoordinatorClient, profile: { agentId?: string }, availability: string): Promise<void> {
   if (!profile.agentId) return;
   const upgrade = loadUpgradeState();
+  const clientHeaders = clientVersionHeaderValues();
   try {
     await client.sendAgentHeartbeat(profile.agentId, {
-      clientVersion: CLIENT_VERSION,
-      daemonVersion: CLIENT_VERSION,
-      contractVersion: CONTRACT_VERSION,
-      protocolVersion: PROTOCOL_VERSION,
+      clientVersion: clientHeaders.clientVersion,
+      daemonVersion: clientHeaders.clientVersion,
+      contractVersion: clientHeaders.contractVersion,
+      protocolVersion: clientHeaders.protocolVersion,
       availability,
       upgradePhase: upgrade.phase,
     });
