@@ -321,6 +321,7 @@ export class CoordinatorClient {
     name: string;
     description?: string;
     sponsorPrincipalId: string;
+    observationCycleInterval?: number;
     metadata?: Record<string, unknown>;
   }): Promise<Project> {
     return runContract(async () => {

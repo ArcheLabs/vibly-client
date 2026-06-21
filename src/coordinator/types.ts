@@ -54,6 +54,11 @@ export interface Project {
   description?: string;
   sponsorPrincipalId?: string;
   status: string;
+  protocol?: {
+    version?: unknown;
+    traceRequired?: boolean;
+    observationCycleInterval?: number;
+  };
   metadata?: Record<string, unknown>;
   createdAt?: string;
 }
