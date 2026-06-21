@@ -5,8 +5,6 @@ const NetworkFeatureSchema = z.object({
   daemon: z.boolean(),
   staking: z.boolean(),
   rootIdentityRegistration: z.boolean(),
-  getVibConversion: z.boolean(),
-  getVibClaim: z.boolean(),
 });
 
 const NetworkChainSchema = z.object({
@@ -40,7 +38,6 @@ const NetworkProfileSchema = z.object({
   viblyRpcUrl: z.string().optional(),
   viblyRpcUrls: z.array(z.string()).optional(),
   chains: z.object({
-    payment: NetworkChainSchema.optional(),
     vibly: NetworkChainSchema.optional(),
   }).optional(),
   features: NetworkFeatureSchema.optional(),

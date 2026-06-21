@@ -6,7 +6,7 @@ const client = () => new CoordinatorClient({ baseUrl: "http://coordinator.test",
 const expectedVersionHeaders = {
   "x-vibly-client-package": "@vibly-ai/client",
   "x-vibly-client-version": "0.1.1",
-  "x-vibly-contract-version": "0.1.0",
+  "x-vibly-contract-version": "0.1.1",
   "x-vibly-protocol-version": "0.2",
 };
 

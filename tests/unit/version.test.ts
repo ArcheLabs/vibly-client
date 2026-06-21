@@ -12,7 +12,7 @@ describe("client version headers", () => {
     expect(clientVersionHeaderValues()).toEqual({
       packageName: "@vibly-ai/client",
       clientVersion: "0.1.1",
-      contractVersion: "0.1.0",
+      contractVersion: "0.1.1",
       protocolVersion: "0.2",
     });
   });

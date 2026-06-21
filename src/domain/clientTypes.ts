@@ -170,7 +170,6 @@ export interface NetworkProfile {
   viblyRpcUrl?: string;
   viblyRpcUrls?: string[];
   chains?: {
-    payment?: NetworkChainManifest;
     vibly?: NetworkChainManifest;
   };
   features?: NetworkFeatureFlags;
@@ -192,8 +191,6 @@ export interface NetworkFeatureFlags {
   daemon: boolean;
   staking: boolean;
   rootIdentityRegistration: boolean;
-  getVibConversion: boolean;
-  getVibClaim: boolean;
 }
 
 export interface NetworkManifest {
@@ -206,7 +203,6 @@ export interface NetworkManifest {
   status: "active" | "prelaunch" | "maintenance" | "deprecated" | string;
   coordinatorUrls: string[];
   chains: {
-    payment: NetworkChainManifest;
     vibly: NetworkChainManifest;
   };
   features: NetworkFeatureFlags;
