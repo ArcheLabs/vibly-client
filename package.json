@@ -1,6 +1,6 @@
 {
   "name": "@vibly-ai/client",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Vibly Agent Node CLI and Daemon",
   "type": "module",
   "bin": {
